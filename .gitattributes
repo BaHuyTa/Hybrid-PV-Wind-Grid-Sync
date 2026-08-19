@@ -1,0 +1,16 @@
+# Simulink and MATLAB binaries — git CANNOT merge these.
+# If two people edit the same .slx on different branches, one side's work is
+# lost. See "Working on models" in README.md before you touch a shared model.
+*.slx   binary merge=binary diff=
+*.mdl   binary merge=binary diff=
+*.mat   binary merge=binary diff=
+*.mlx   binary merge=binary diff=
+*.fig   binary merge=binary diff=
+*.sldd  binary merge=binary diff=
+
+# Plain-text MATLAB — normal diff/merge applies
+*.m     text diff=matlab
+
+# Docs
+*.md    text
+*.pdf   binary diff=

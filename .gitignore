@@ -1,0 +1,42 @@
+# MATLAB / Simulink build + session artifacts
+*.asv
+*.autosave
+*.m~
+slprj/
+sccprj/
+codegen/
+*.slxc
+*.mexa64
+*.mexw64
+*.mexmaci64
+
+# Simulink autosave / backup
+*.slx.r*
+*.slx.autosave
+*.mdl.autosave
+*.slx.original
+
+# Simulink cache + generated
+*.slxc
+*_sfun.*
+*_rtwlib.*
+html/
+
+# Simulation output (regenerate, don't commit — these get large fast)
+results/*.mat
+results/*.csv
+*.fig
+
+# MATLAB session
+startup_log.txt
+matlab_crash_dump*
+java.log.*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Scratch / not project artifacts
+Pasted image*.png
+scratch/
