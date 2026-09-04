@@ -40,3 +40,6 @@ desktop.ini
 # Scratch / not project artifacts
 Pasted image*.png
 scratch/
+
+# Personal — not part of the team deliverable
+individual/

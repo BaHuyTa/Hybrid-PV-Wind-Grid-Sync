@@ -61,14 +61,21 @@ tests/scenarios/  test cases and expected results
 
 ## Getting started
 
-Requires MATLAB R2026a with Simulink, Simscape, and **Simscape Electrical
-(Specialized Power Systems)**. Control System Toolbox and Simulink Control Design
-are used for loop tuning.
+Requires MATLAB R2026a with Simulink, Simscape and **Simscape Electrical**.
+Control System Toolbox and Simulink Control Design are used for loop tuning.
+
+> **Correction (Sep 2026):** this previously said *Specialized Power Systems*.
+> That product is **not installed** on the lab image — `powerlib` does not exist
+> there. The wind switched model is built from foundation Simscape Electrical
+> (`ee_lib`), which is present and sufficient. If your subsystem plan assumed SPS
+> blocks, check before you build.
 
 ```matlab
-addpath(genpath('params'), genpath('scripts'));
+addpath(genpath('params'), genpath('scripts'), genpath('models'));
 wp = windParams();      % load wind subsystem parameters
-wind_model_check        % verify the sizing closes
+wind_model_check        % sizing arithmetic only - no Simulink needed
+wind_scenarios          % 6 scenarios, 10 checks, both MPPT modes
+wind_fidelity_check     % averaged vs switched cross-validation
 ```
 
 ## Working on models
@@ -109,6 +116,9 @@ Loops are tuned inside-out. The separation is what makes that valid:
 | Source-side boost + MPPT | Huy, Belal | ~1 s |
 | Wind rotor (mechanical) | Huy | ~4.8 s measured |
 
+The wind branch is built and tested standalone: two fidelities, cross-validated to under 1%, with
+a 6-scenario / 10-check harness. See [docs/wind-model-spec.md](docs/wind-model-spec.md) §6a.
+
 The rotor is ~24× slower than the DC-link loop, so the control pair can tune the
 cascade without modelling wind dynamics. It also means instability found at low SCR
 is genuinely a grid-side effect rather than a plant artifact.
@@ -122,3 +132,8 @@ Not yet confirmed with the team — flagged so nobody builds on them unknowingly
   turbine datasheet.
 - Wind uses a passive diode bridge + boost rather than an active rectifier. See
   [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning.
+- **The wind MPPT default is now optimal torque control, not P&O.** P&O tracks 96-99% in steady
+  and turbulent wind but only 74% through a sustained ramp, because rising wind makes every
+  perturbation look successful. Both are built and selectable (`wp.mppt_mode`); P&O is not
+  deleted. This affects the claim that both plants share one MPPT algorithm, so it needs a team
+  decision — see [docs/wind-model-spec.md](docs/wind-model-spec.md) §2.
