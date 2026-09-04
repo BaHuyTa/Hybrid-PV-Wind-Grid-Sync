@@ -37,10 +37,11 @@ same instant as a wind gust up) becomes a PCC test under SC6, not a DC-link test
 | W12 | Switched current loop tracks its reference | within 3% | `wind_fidelity_check.m` | 97.99 A vs 98.26 A | fidelity log |
 | W13 | P&O tuning | ≥ 95% at the chosen setting, robust neighbourhood | `wind_mppt_sweep.m` | 99.1%, worst neighbour 93.7% | sweep log, params table |
 | W14 | Structure: library links, workspace binding, no literal design parameters | all pass | `wind_model_lint.m` | see script output | script output |
+| W15 | Harmonics: stator current THD quantified; bridge ripple into DC link 2 < 10%; switching ripple at f_sw consistent with time domain | 6 checks | `wind_thd_check.m` | THD 15.5%; 6 f_e into link 0.58 A of 47 A; 14.1 A at 10 kHz vs 16.5 A predicted | script output, results/thd_spectra.png |
 
 Regenerate everything in section B with:
 
 ```matlab
 addpath(genpath('params'), genpath('scripts'), genpath('models'));
-wind_model_check; wind_model_lint; wind_scenarios; wind_fidelity_check; wind_mppt_sweep;
+wind_model_check; wind_model_lint; wind_scenarios; wind_fidelity_check; wind_mppt_sweep; wind_thd_check;
 ```

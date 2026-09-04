@@ -42,6 +42,11 @@ absorbing the whole speed range. The boost is the cheap answer, and it is the on
 
 Accepted limitation: the 6-pulse bridge draws non-sinusoidal stator current, so there is a 6th-harmonic
 torque ripple on the shaft. It does not propagate past DC link 2 and does not affect any graded metric.
+**Quantified 5 Sep** (`scripts/wind_thd_check.m`, switched model at rated): stator current THD **15.5%**,
+5th 13.8%, 7th 6.5%, 11th 2.2%, no triplens. Lower than the ideal 31% because the 0.22 pu stator
+reactance gives a long commutation overlap. The 6·f_e ripple reaching DC link 2 is 0.58 A on 47 A, 1.2%.
+What DC link 2 does see is the boost diode's 10 kHz pulse train: 63 A amplitude, which is 1.0 V of
+ripple on a 1 mF capacitor. Integration should size C_dc2 from that number, not from the bridge.
 
 ## 2. Layers and blocks
 
@@ -296,6 +301,8 @@ scripts/
   wind_ramp_figure.m      the S3 ramp plot: P&O vs torque control, lambda and P_dc
   wind_model_lint.m       structure: library links resolved, workspace bound to
                           windParams(), library locked, no literal design parameters
+  wind_thd_check.m        FFT / THD on the switched model: stator current, current
+                          into DC link 2, boost inductor current (6/6 checks)
 ```
 
 ```matlab
@@ -304,6 +311,7 @@ wind_model_check        % sizing closes
 wind_model_lint         % structure: links, workspace, no literals
 wind_scenarios          % 10/10
 wind_fidelity_check     % 5/5, agreement under 1%
+wind_thd_check          % 6/6, FFT of the switched model
 ```
 
 Both models take their parameters from the model workspace, which is bound to

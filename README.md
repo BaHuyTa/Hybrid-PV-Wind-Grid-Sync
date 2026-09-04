@@ -153,6 +153,7 @@ wind_model_check        % sizing arithmetic only - no Simulink needed
 wind_model_lint         % library links resolved, no literal design parameters
 wind_scenarios          % 6 scenarios, 10 checks, both MPPT modes
 wind_fidelity_check     % averaged vs switched cross-validation
+wind_thd_check          % FFT / THD of the switched model (stator, DC link 2, inductor)
 ```
 
 ## Working on models
