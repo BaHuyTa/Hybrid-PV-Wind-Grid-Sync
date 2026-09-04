@@ -99,6 +99,10 @@ wp.Ts_mppt  = 5.0;      % s    P&O perturbation period - see note below
 % needs the single-device value.
 wp.C_rect   = 1e-3;     % F    rectifier-side smoothing capacitor (was 100e-6;
                         %      same pu impedance at 10x the current)
+wp.R_Crect  = 0;        % ohm  its series resistance. Zero = ideal, and that is a
+                        %      stated choice, not a block default left in place;
+                        %      wind_model_lint.m flags any design value that is
+                        %      still a literal in a mask.
 wp.Vf_dev   = 0.8;      % V    forward drop of one diode
 wp.Ron_dev  = 1e-3;     % ohm  on-resistance of one device: bridge diodes,
                         %      boost diode and IGBT all read this.

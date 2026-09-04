@@ -108,7 +108,7 @@ control layer. It is a W7 decision for the control pair.
 ## Layout
 
 ```
-docs/         proposal, subsystem specs
+docs/         proposal, subsystem specs, traceability.md (criterion -> test -> evidence)
 params/       shared parameter files — single source of truth
 models/
   wind/       turbine, PMSG, rectifier, boost      Huy
@@ -150,6 +150,7 @@ Control System Toolbox and Simulink Control Design are used for loop tuning.
 addpath(genpath('params'), genpath('scripts'), genpath('models'));
 wp = windParams();      % load wind subsystem parameters
 wind_model_check        % sizing arithmetic only - no Simulink needed
+wind_model_lint         % library links resolved, no literal design parameters
 wind_scenarios          % 6 scenarios, 10 checks, both MPPT modes
 wind_fidelity_check     % averaged vs switched cross-validation
 ```

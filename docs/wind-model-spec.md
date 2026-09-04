@@ -294,11 +294,14 @@ scripts/
   wind_scenarios.m        6 scenarios, 10 checks, both MPPT modes
   wind_fidelity_check.m   averaged vs switched cross-validation
   wind_ramp_figure.m      the S3 ramp plot: P&O vs torque control, lambda and P_dc
+  wind_model_lint.m       structure: library links resolved, workspace bound to
+                          windParams(), library locked, no literal design parameters
 ```
 
 ```matlab
 addpath(genpath('params'), genpath('scripts'), genpath('models'));
 wind_model_check        % sizing closes
+wind_model_lint         % structure: links, workspace, no literals
 wind_scenarios          % 10/10
 wind_fidelity_check     % 5/5, agreement under 1%
 ```
