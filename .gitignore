@@ -43,3 +43,7 @@ scratch/
 
 # Personal — not part of the team deliverable
 individual/
+
+# Meeting recordings / transcripts - private, names inside
+docs/Meeting*
+*.docx

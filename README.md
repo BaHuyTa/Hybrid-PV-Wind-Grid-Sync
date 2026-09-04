@@ -7,8 +7,11 @@ Product Owner: Mohammad Abuhilaleh · Coordinators: Valerie Gay, Dayna Sais, Can
 
 ## What it is
 
-> **Architecture change — 4 September 2026.** After the product-owner meeting the
-> system is **AC-coupled**, and the wind branch is rated **30 kW** (was 3 kW).
+> **Architecture change — product-owner meeting, 3 September 2026.** The system is
+> now **AC-coupled**, and the wind branch is rated **30 kW** (was 3 kW). AC coupling is
+> the product owner's recommendation. The 30 kW figure is the team's; he asked for a
+> demand-based reason behind every rating, which is what [Design basis](#design-basis)
+> below is for.
 > Each source now has its own DC link and its own grid-tie inverter, and the two
 > inverters meet on the AC bus at the point of common coupling. The shared 700 V
 > DC bus is gone. See [docs/dc_vs_ac_coupled.png](docs/dc_vs_ac_coupled.png) for
@@ -27,17 +30,69 @@ Indicative ratings: 5 kW PV + 30 kW wind, each through its own 700 V DC link and
 inverter → 400 V, 50 Hz grid.
 
 ```
-PV array ──► boost + P&O MPPT ──► DC link 1 ──► inverter 1 (VSI + LCL) ──┐
-                                                  + SRF-PLL, dq loop, SFS  ├──► AC bus ──► grid (PCC)
-wind ──► PMSG ──► rectifier ──► boost + MPPT ──► DC link 2 ──► inverter 2 ──┘
-                                                  + SRF-PLL, dq loop, SFS
+PV array ──► boost + P&O MPPT ──► DC bus (700 V) ──► interlinking converter ──┐
+                                    │                 (VSI + LCL, PLL, dq, SFS)  │
+                                  DC load                                        ├──► AC bus ──► grid (PCC)
+wind ──► PMSG ──► rectifier ──► boost + MPPT ──► DC link 2 ──► inverter 2 ──────┘      │
+        └──────── the wind AC/DC/AC converter ─────────────────────────┘             AC load
 ```
+
+This is the structure the product owner asked for on 3 September: a grid-connected
+**microgrid**, with a DC bus that carries the PV and a DC load, an AC bus that carries
+the AC load and the grid connection, an interlinking converter between the two buses,
+and the wind arriving at the AC bus through its own AC/DC/AC converter.
+
+His reasons for AC coupling, recorded so the design has a stated rationale:
+
+- **Inverter capacity and cost.** One inverter rated for the sum of both sources is
+  expensive and impractical; two smaller ones split the duty.
+- **Single point of failure.** With one inverter, a trip or a maintenance outage takes
+  all generation off the grid. Two inverters give N-1: lose one, the other keeps exporting.
+- **Convention.** Wind is normally connected to the AC bus through AC/DC/AC; PV through
+  DC/DC to a DC bus. He was open to DC coupling only with a specific reason, and we had none.
 
 What AC coupling changes for the build: two PLLs, two dq current loops, two DC-link
 loops and two SFS instances instead of one of each. The inverter is designed once and
 instantiated twice at different ratings (5 kW and 30 kW). The interaction between two
 grid-tied inverters on one PCC — which the DC-coupled design avoided by construction —
-is now part of the problem, and it is where the weak-grid (SCR = 3) work lands.
+is now part of the problem, and it is where the weak-grid (SCR = 3) work lands. Loads
+and power sharing are new work items; see Design basis.
+
+## Design basis
+
+> **Draft, 4 September 2026 — for the team to argue with at the next product-owner
+> meeting.** He asked where the numbers come from: "when you design anything, you start
+> from the demand." We had no answer. This is a first one.
+
+**Demand (assumed).** A rural site at the end of a weak feeder — the reason for the
+SCR = 3 criterion — with a farm workshop, cold store and a few houses:
+
+| Load | Where | Peak | Typical daytime |
+|---|---|---|---|
+| AC load (workshop, cold store, houses) | AC bus | 25 kW | 12–15 kW |
+| DC load (lighting, comms, battery charging) | DC bus | 3 kW | 2 kW |
+
+**Capacity.** 35 kW nameplate against a 28 kW peak, so the site can meet its own peak
+with either source partly available and export the rest. Wind carries the base
+(30 kW) because a site like this is chosen for its wind resource; PV (5 kW) sits on the
+DC bus where it directly serves the DC load and shaves the daytime peak. Nothing here is
+measured. If the team prefers a different demand, the split follows from it, and every
+wind-side number follows from `wp.P_elec` in `params/windParams.m`.
+
+**Power sharing.** Grid-connected, both sources run at their maximum power point and the
+grid absorbs the surplus or covers the deficit — no sharing decision is needed. The
+product owner's "each source shares in proportion to its capacity" applies when the
+export is limited (a weak grid, a curtailment order, or an islanded microgrid): then the
+30 kW and 5 kW sources back off 6:1. That needs a power-limit input on each source — the
+wind branch does not have one yet, see the wind spec §4 — and a sharing rule in the
+control layer. It is a W7 decision for the control pair.
+
+**Questions he asked that still need written answers:**
+
+- Why 5 kW and 30 kW — this section, once the team agrees the demand.
+- Why a boost and not a buck on the PV — Belal. Short version: a 5 kW string sits well
+  below 700 V, so the DC-bus voltage is above the array voltage at every irradiance.
+- Where the loads are and who models them — integration (Hoang), with the control pair.
 
 ## Success criteria
 
@@ -59,10 +114,12 @@ models/
   wind/       turbine, PMSG, rectifier, boost      Huy
   pv/         PV array, boost, MPPT                Belal
   control/    SRF-PLL, dq current loop, DC-link    Aqib, Duc
-              loop - one design, two instances
+              loop, power sharing - one inverter
+              design, two instances
   protection/ SFS anti-islanding (x2), NDZ         Redhwan
-  integration/ top-level model, DC links 1 and 2,  Hoang
-              AC bus / PCC, harness
+  integration/ top-level model, DC bus + DC load,  Hoang
+              DC link 2, AC bus + AC load, PCC,
+              harness
 scripts/      analysis + verification scripts
 tests/scenarios/  test cases and expected results
 ```
@@ -168,7 +225,10 @@ Not yet confirmed with the team — flagged so nobody builds on them unknowingly
   [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning. The
   architecture diagram labels the wind front end just "Rectifier"; the boost is
   inside that box, and it is what does the MPPT.
-- **DC link 2 is 700 V**, matching DC link 1, so the two inverters can be one design.
+- **The loads and the demand in Design basis are placeholders.** The product owner wants
+  every rating traced to a demand; the table there is the first attempt and nobody has
+  agreed it yet.
+- **DC link 2 is 700 V**, matching the PV DC bus, so the two inverters can be one design.
   Its capacitor is owned by integration, not by the wind branch — same rule as before,
   now applied per link. Needs Hoang's and the control pair's agreement.
 - **The wind MPPT default is now optimal torque control, not P&O.** P&O tracks 96-99% in steady

@@ -2,7 +2,7 @@
 
 **Owner:** Ba Huy Ta · **Weeks:** W5–W6, revised W7 · **Team 1, Smart Grid Technologies**
 
-> **Revision, 4 September 2026 — AC-coupled, 30 kW.** After the product-owner meeting the
+> **Revision, 4 September 2026 — AC-coupled, 30 kW.** After the product-owner meeting of 3 September the
 > system is **AC-coupled** (one DC link and one inverter per source, meeting on the AC bus at
 > the PCC) and the wind branch is rated **30 kW**, not 3 kW. The topology *inside* the wind
 > branch is unchanged. What changed: the rating (a clean 10× per-unit scaling), what the branch
@@ -24,6 +24,13 @@ DC node — the only difference is which DC link each one feeds. An active recti
 machine-side dq current loop and speed loop to the control pair's workload, who now have two
 grid-side inverters to build instead of one, and no success criterion in §2.2 of the proposal
 measures generator-side performance.
+
+**The product owner's reasons for AC coupling** (3 September), recorded here because he asked
+that every design step carry its reason: one inverter rated for both sources is costly and
+impractical; a single inverter is a single point of failure, so a trip or maintenance outage
+loses all generation; and wind is conventionally connected to the AC bus through an AC/DC/AC
+converter while PV goes DC/DC to a DC bus. In his language, this whole branch — bridge, boost
+and inverter 2 — *is* the wind's AC/DC/AC converter.
 
 **Why the boost stays under AC coupling.** The architecture diagram labels the wind front end
 just "Rectifier". The boost is inside that box and it is what does the MPPT. Without it, a diode
@@ -92,7 +99,7 @@ one MPPT algorithm with the PV branch. Mode 0 still does that and still works �
 
 | Quantity | 30 kW | 3 kW (was) | Basis |
 |---|---|---|---|
-| Rated electrical power | **30 kW** | 3 kW | product owner, 4 Sep 2026 |
+| Rated electrical power | **30 kW** | 3 kW | team, after the PO meeting of 3 Sep 2026 — demand basis in §3a |
 | Rated wind speed | 12 m/s | 12 m/s | assumed |
 | Cut-in wind speed | 4 m/s | 4 m/s | set by max boost duty 0.85 |
 | Air density ρ | 1.225 kg/m³ | | |
@@ -169,6 +176,15 @@ on the other side of it changed.
 per phase at 400 V — with its DC link held at 700 V by its own voltage loop, plus its own SRF-PLL,
 dq current loop and SFS. That is the PV inverter's design at six times the rating. Nothing in the
 wind branch assumes anything about the inverter beyond "the link voltage is regulated".
+
+**Not yet in the contract — a power limit.** The product owner wants the sources to share load
+in proportion to capacity when export is limited (weak grid, curtailment, islanded operation).
+That needs a `P_lim` [W] input, default `P_elec`, that caps what the branch delivers. It is not
+built. Two design notes for when it is, both consequences of a fixed-pitch rotor: curtailing
+must be done on the **low-λ (stall) side** by pulling *more* torque and slowing the rotor,
+because backing off torque on the high-λ side lets the rotor run away; and the extra torque is
+bounded by the boost duty ceiling at low V_rect, so the achievable curtailment depth shrinks
+towards cut-in. A W7 item, after the team settles the sharing rule (README, Design basis).
 
 **Sample times:** power stage at `Ts_power`; boost current loop at `Ts_ctrl` (matched to PV);
 MPPT at `Ts_mppt`.
@@ -253,6 +269,8 @@ converter, which is what the switched model is for.
 
 - Step 8 → 12 m/s; ramp; IEC extreme operating gust; cut-in / cut-out transitions
 - Turbulent wind: sum-of-sines about a Weibull mean
+- **Curtailment step (once `P_lim` exists):** limit stepped from 30 kW to 15 kW at rated wind. The
+  rotor must settle on the stall side without overspeed, and the duty must stay under 0.85.
 - **Worst-case combined:** PV irradiance step down at the same instant as a wind gust up. Under DC
   coupling this was the largest DC-link excursion. Under AC coupling each source's DC link sees only
   its own transient — so the 5% / 200 ms criterion is tested per link by the single-source
@@ -323,3 +341,11 @@ Simscape Electrical (`ee_lib`), which is present.
    sharing one algorithm with PV, so it needs a decision rather than my say-so.
 7. Belal — does the PV branch's P&O show the same ramp defect? Mine does, and the mechanism is
    general. Worth pointing the PV harness at a sustained irradiance ramp specifically.
+8. **Everyone — the demand.** The product owner wants the ratings traced to a load. The README
+   has a draft (25 kW AC + 3 kW DC, rural weak-feeder site). Agree it, change it, or replace it —
+   but bring a number with a reason to the next meeting.
+9. **Hoang / Aqib / Duc — loads and sharing.** Who models the DC load on the PV bus and the AC
+   load on the AC bus, and what is the sharing rule when export is limited? The wind side needs
+   to know whether to build `P_lim` in W7.
+10. **Belal — boost, not buck.** He asked and nobody in the room could answer. One written
+    sentence in the PV spec: string voltage against the 700 V bus.

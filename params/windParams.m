@@ -9,7 +9,7 @@ function wp = windParams()
 %
 %   wp = windParams();
 %
-% ARCHITECTURE CHANGE (product owner meeting, 4 Sep 2026): the system is now
+% ARCHITECTURE CHANGE (product-owner meeting, 3 Sep 2026): the system is now
 % AC-COUPLED and the wind branch is rated 30 kW (was 3 kW on a DC bus shared
 % with PV). The wind branch keeps its topology - PMSG -> diode bridge -> boost
 % + MPPT - but it now feeds ITS OWN DC link ("DC link 2") and its own grid-tie
@@ -22,7 +22,7 @@ function wp = windParams()
 % points therefore carry over - see scripts/wind_scenarios.m for the re-run.
 
 %% ---- Design assumptions (the only free choices) -----------------------
-wp.P_elec   = 30000;    % W    rated electrical output (product owner, 4 Sep 2026; was 3000)
+wp.P_elec   = 30000;    % W    rated electrical output (team, after PO meeting 3 Sep 2026; was 3000)
 wp.v_rated  = 12;       % m/s  ASSUMPTION - not from proposal, see README
 wp.v_cutin  = 4;        % m/s  ASSUMPTION - set by max boost duty 0.85
 wp.eta      = 0.90;     % -    source-to-DC-link efficiency

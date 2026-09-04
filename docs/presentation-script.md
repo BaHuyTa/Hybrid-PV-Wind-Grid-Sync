@@ -1,7 +1,7 @@
 # Road Show Run Sheet — Week 6
 
-> **Superseded, 4 September 2026.** This is the run sheet for the roadshow as delivered on
-> 2 September, when the design was DC-coupled with 3 kW of wind. After the product-owner meeting
+> **Superseded.** This is the run sheet for the roadshow as delivered on 2 September, when the
+> design was DC-coupled with 3 kW of wind. After the product-owner meeting of 3 September
 > the system is AC-coupled (one DC link and one inverter per source) and the wind branch is 30 kW.
 > The pitch below — "one shared bus, one inverter" — is what was said on the day, not the current
 > design. See the README and `docs/wind-model-spec.md` for the current architecture.
