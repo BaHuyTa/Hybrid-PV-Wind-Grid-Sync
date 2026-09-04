@@ -25,6 +25,7 @@ html/
 # Simulation output (regenerate, don't commit — these get large fast)
 results/*.mat
 results/*.csv
+results/*.png
 *.fig
 
 # MATLAB session

@@ -293,6 +293,7 @@ scripts/
   wind_mppt_sweep.m       open-loop duty sweep + P&O tuning table
   wind_scenarios.m        6 scenarios, 10 checks, both MPPT modes
   wind_fidelity_check.m   averaged vs switched cross-validation
+  wind_ramp_figure.m      the S3 ramp plot: P&O vs torque control, lambda and P_dc
 ```
 
 ```matlab
