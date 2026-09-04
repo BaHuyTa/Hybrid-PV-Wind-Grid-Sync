@@ -7,7 +7,7 @@
 %
 % Method - the rotor is PINNED (inertia forced huge) at the rated operating
 % point. Two reasons:
-%   1. The rotor settles in ~5 s. The switched model runs at ~190x real time,
+%   1. The rotor settles in ~5 s. The switched model runs at ~200x real time,
 %      so a mechanically-settled switched run would take ~16 minutes.
 %   2. Pinning isolates what the switched model is actually FOR: the rectifier
 %      and converter. Any difference left is a converter-fidelity difference,
@@ -16,10 +16,12 @@
 % whatever it is asked for) - that is expected, and is why the checks below are
 % on the electrical operating point rather than on efficiency.
 %
-% Two defects were found this way, neither visible in the averaged model:
+% Three defects were found this way, none visible in the averaged model:
 %   - a duty feedforward that silently cancelled the current loop
 %   - single-sample-per-period current sensing reading the ripple minimum
 %     instead of the mean, biasing the current ~half the ripple high
+%   - (30 kW rescale) the boost diode left at Simscape's default 0.3 ohm:
+%     7 W at 3 kW, 600 W at 30 kW. Now wp.Ron_dev, shared by every device.
 %
 % Usage:
 %   addpath(genpath('params'), genpath('scripts'), genpath('models'));
@@ -36,8 +38,12 @@ T_stop = 0.2;                       % 2000 switching periods
 t = (0:1e-4:T_stop)';
 v = v_test*ones(size(t));
 
-ov = struct('w_init', w_mpp, 'iL_init', 8, 'J', 1e7);
 P_ref = wp.k_opt*w_mpp^3;           % torque-law power reference at this speed
+
+% Seed the inductor current near its operating point and make the rotor an
+% effectively infinite flywheel. Both scale with the rating, so neither is a
+% literal number.
+ov = struct('w_init', w_mpp, 'iL_init', 0.8*P_ref/wp.V_rect_r, 'J', 1e4*wp.J);
 
 fprintf('=== Averaged vs switched, rotor pinned at %.1f rad/s (%g m/s) ===\n', ...
         w_mpp, v_test);

@@ -1,5 +1,23 @@
 # Road Show Run Sheet — Week 6
 
+> **Superseded, 4 September 2026.** This is the run sheet for the roadshow as delivered on
+> 2 September, when the design was DC-coupled with 3 kW of wind. After the product-owner meeting
+> the system is AC-coupled (one DC link and one inverter per source) and the wind branch is 30 kW.
+> The pitch below — "one shared bus, one inverter" — is what was said on the day, not the current
+> design. See the README and `docs/wind-model-spec.md` for the current architecture.
+
+**Wednesday 2 September 2026** · Team 1, Smart Grid Technologies · Product owner: Dr Mohammad Abuhilaleh
+
+> **Read this first.** This is not a stage presentation. It is a trade show. You sit at your
+> team's table, a handful of visitors stand around it, and you have **four minutes** to talk
+> them through the project — three times, to three different groups. The brief is explicit:
+> *"bring a laptop if you wish to show a slide or 2, but it is a conversation, not a long
+> slide show."*
+>
+> The 11-slide deck is not the instrument for this. Two slides of it are.
+
+---
+
 ## Your shift
 
 | | |

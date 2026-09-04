@@ -10,9 +10,11 @@ function [tl, logs] = windSim(t, v_wind, opts)
 % (V_rect, i_L), which the telemetry contract does not expose.
 %
 % The DC link is represented as a stiff voltage source at wp.V_dc. That is the
-% correct stand-in here: the real capacitor is owned by the integration model
-% (Hoang), and the whole point of the bandwidth separation argument is that the
-% wind branch sees the bus as constant.
+% correct stand-in here: AC-coupled, the wind branch feeds its own DC link
+% (DC link 2), which inverter 2's voltage loop holds at wp.V_dc. The capacitor
+% is owned by the integration model (Hoang), and the whole point of the
+% bandwidth separation argument is that the wind branch sees the link as
+% constant.
 %
 % opts fields (all optional):
 %   .model     model name                      (default 'windPlantAvg')

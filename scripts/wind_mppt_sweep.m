@@ -1,6 +1,12 @@
 % wind_mppt_sweep.m
 % Tunes and justifies the P&O MPPT settings in params/windParams.m.
 %
+% Every run here forces wp.mppt_mode = 0. The default is now torque control
+% (mode 1), which does not use the duty seed or the perturbation settings, so
+% without the override this script would measure the torque controller 35 times
+% and call it a sweep. (It did exactly that after the default changed - fixed
+% during the 30 kW rescale, 4 Sep 2026.)
+%
 % Two questions, in order:
 %   1. What can the plant actually deliver? An open-loop duty sweep gives the
 %      true power-vs-duty curve and its peak. Without this number there is
@@ -34,7 +40,10 @@ fprintf('  %-7s %-8s %-8s %-11s %-9s\n', 'duty', 'lambda', 'Cp', 'P_mech[W]', 'P
 D = 0.30:0.025:0.75;
 P_ol = zeros(size(D));
 for k = 1:numel(D)
-    o = struct('override', struct('dD',0, 'd_init',D(k), 'd_min',0.01));
+    % mppt_mode is forced to 0 (P&O) with a zero step, i.e. a fixed duty. Without
+    % that, the default torque controller (mode 1) ignores d_init and every
+    % point of the "sweep" lands on the same operating point.
+    o = struct('override', struct('mppt_mode',0, 'dD',0, 'd_init',D(k), 'd_min',0.01));
     tl = windSim(t, v, o);
     P_ol(k) = tailmean(tl.P_dc, T-10);
     fprintf('  %-7.3f %-8.2f %-8.3f %-11.0f %-9.0f\n', D(k), ...
@@ -69,7 +78,7 @@ eff = zeros(numel(dD_list), numel(Ts_list));
 for i = 1:numel(dD_list)
     fprintf('  %-9.3f', dD_list(i));
     for j = 1:numel(Ts_list)
-        o = struct('override', struct('Ts_mppt',Ts_list(j), 'dD',dD_list(i)));
+        o = struct('override', struct('mppt_mode',0, 'Ts_mppt',Ts_list(j), 'dD',dD_list(i)));
         tl = windSim(t, v, o);
         eff(i,j) = 100*tailmean(tl.P_dc, 2*T/3)/P_ach;
         fprintf('%8.1f%%', eff(i,j));
