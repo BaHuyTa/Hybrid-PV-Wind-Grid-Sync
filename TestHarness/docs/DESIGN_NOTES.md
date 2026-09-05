@@ -149,12 +149,12 @@ just to look at it, and several tests can share one waveform.
 
 | Scenario | What it represents |
 |---|---|
-| `source_step` | PV and wind come up: `i_src` steps 0 → 10 A |
+| `source_step` | PV and wind come up: `i_src` steps 0 → 200 A |
 | `source_ramp` | Irradiance rises gradually over 100 ms |
-| `cloud_transient` | Cloud covers the array: `i_src` drops 10 → 2 A |
+| `cloud_transient` | Cloud covers the array: `i_src` drops 200 → 40 A |
 | `reference_step` | Operator raises the setpoint: 700 → 750 V |
 | `cold_start` | Bus starts at 650 V and must charge |
-| `overload` | `i_src` steps to 60 A, past the 20 A inverter limit |
+| `overload` | `i_src` steps to 1200 A, past the 400 A inverter limit |
 
 ### `run/runScenario.m`
 The **only** place the model is simulated. Both interactive exploration and the
@@ -204,14 +204,14 @@ baseline.
 This is the part that is easy to get wrong, and it is worth understanding
 properly.
 
-During `overload`, the source pushes in 60 A while the inverter is only allowed
-to remove 20 A. The surplus 40 A charges the capacitor and the bus voltage
+During `overload`, the source pushes in 1200 A while the inverter is only allowed
+to remove 400 A. The surplus 800 A charges the capacitor and the bus voltage
 climbs without bound — it reaches about 4.5 kV. **That is physics, not a
 defect.**
 
 A harness that asserted voltage regulation there would report a failure on every
 single run. Within a week everyone would learn to ignore that red mark, and the
-one assertion that genuinely matters — *did the 20 A current limit hold?* —
+one assertion that genuinely matters — *did the 400 A current limit hold?* —
 would be lost in the noise. A test suite people ignore is worse than no test
 suite, because it costs time and buys false confidence.
 
@@ -224,7 +224,7 @@ overload    4563.22   0.2500   4563.22   20.00   pass (only currentLimit applies
 ```
 
 `overload` also has a second assertion guarding the first: it verifies the bus
-*did* lose regulation. Without that, someone lowering the 60 A step to 15 A
+*did* lose regulation. Without that, someone lowering the 1200 A step to 300 A
 would turn the whole test into a no-op that still shows green.
 
 ---
@@ -242,7 +242,7 @@ Kp = C · ωc          places the loop crossover at ωc
 Ki = Kp · ωc/10      places the PI zero a decade below crossover
 ```
 
-The only thing that changes between variants is `ωc`. Measured against a 10 A
+The only thing that changes between variants is `ωc`. Measured against a 200 A
 source step:
 
 | ωc (rad/s) | Peak deviation | % of 700 V | Settling |
@@ -283,7 +283,7 @@ failed silently **and in the flattering direction** — the worst combination.
 Fixed by using the tolerance band as a deadband rather than comparing to zero.
 
 **2. Two scenarios were measuring their own startup transient.**
-`cloud_transient` and `reference_step` both carry 10 A from t = 0, so the
+`cloud_transient` and `reference_step` both carry 200 A from t = 0, so the
 inverter current starts at zero and spends ~60 ms catching up. Firing the event
 at 50 ms measured the startup transient *plus* the event and blamed the event.
 Fixed by delaying those events to 200 ms. **A test must isolate the thing it

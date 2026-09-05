@@ -7,7 +7,7 @@
 %
 % Checks:
 %   1. Cp(lambda,beta) peak and lambda_opt
-%   2. Rotor sizing for 3 kW electrical at rated wind
+%   2. Rotor sizing for 60 kW electrical at rated wind
 %   3. Boost duty across the operating range (must stay under duty_max)
 %   4. Rotor mechanical settling time - the number the control pair needs
 %

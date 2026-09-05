@@ -7,20 +7,23 @@ Product Owner: Mohammad Abuhilaleh · Coordinators: Valerie Gay, Dayna Sais, Can
 
 ## What it is
 
-DC-coupled design. A 5 kW PV array feeds a boost converter under Perturb & Observe
-MPPT; a 3 kW PMSG wind subsystem feeds the same bus through a rectifier. The shared
-DC link exports through one three-phase SVPWM inverter using dq-frame PI current
-control and an SRF-PLL. Anti-islanding uses Sandia Frequency Shift, assessed by
-non-detection zone analysis against AS/NZS 4777.2:2020.
+DC-coupled design, sized for a **light-industrial site behind the meter**: a factory
+with ~250 kW peak demand on a 400 V connection. A 120 kWp PV array feeds a boost
+converter under Perturb & Observe MPPT; a 60 kW PMSG wind subsystem feeds the same bus
+through a rectifier and its own boost. The shared DC link exports through **one**
+three-phase SVPWM inverter using dq-frame PI current control and an SRF-PLL.
+Anti-islanding uses Sandia Frequency Shift, assessed by non-detection zone analysis
+against AS/NZS 4777.2:2020.
 
-Indicative ratings: 5 kW PV + 3 kW wind → 700 V DC link → 400 V, 50 Hz grid.
+Ratings: 120 kWp PV + 60 kW wind → 700 V DC link → 150 kVA inverter → 400 V, 50 Hz
+grid, with a 250 kW site load and an RLC test load at the PCC.
 
-```
-PV array ──► boost + P&O MPPT ──┐
-                                ├──► 700 V DC link ──► 3φ SVPWM inverter ──► grid
-wind ──► PMSG ──► rectifier ────┘        (integration owns C_dc)      + SRF-PLL
-                 ──► boost + MPPT                                     + SFS anti-islanding
-```
+![Architecture](docs/architecture.svg)
+
+The 150 kVA rating is deliberate: it sits under the 200 kVA ceiling of
+AS/NZS 4777.2, so that standard — and every success criterion below — still applies.
+See [docs/decisions.md](docs/decisions.md) for why this scale, why one inverter, and
+what was deliberately left out.
 
 ## Success criteria
 
@@ -118,7 +121,13 @@ is genuinely a grid-side effect rather than a plant artifact.
 Not yet confirmed with the team — flagged so nobody builds on them unknowingly:
 
 - Wind rated speed **12 m/s** and cut-in **4 m/s** are assumed, not from the
-  proposal. All wind sizing follows from them. Alternative: match a real 3 kW
-  turbine datasheet.
+  proposal. All wind sizing follows from them, and at 60 kW that assumption now does
+  more work than it did at 3 kW: it gives a 12.9 m rotor where a real 60 kW machine is
+  nearer 18–21 m. Alternative: match a real 60 kW turbine datasheet.
 - Wind uses a passive diode bridge + boost rather than an active rectifier. See
   [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning.
+- The site load is a constant 250 kW PQ load. A real duty cycle would be more
+  convincing but nothing in the success criteria measures it.
+- SCR = 3 is reached by adding series grid impedance, not by a real weak connection —
+  a 150 kVA plant on an LV feeder sees a much higher SCR in practice. Present the SCR
+  sweep as a per-unit ratio study, not as a claim about this site.

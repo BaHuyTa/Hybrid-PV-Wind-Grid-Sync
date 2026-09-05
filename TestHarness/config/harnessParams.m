@@ -24,10 +24,17 @@ arguments
 end
 
 %% Plant -- the physical DC bus
+% RESCALED 5 Sep 2026 for the 150 kVA plant (see docs/decisions.md). The bus
+% carries 150 kVA / 700 V = 214 A rated, so C, Imax and every source current in
+% inputs/createTestInputs.m were all multiplied by exactly 20. Because Kp = C*wc,
+% the gains follow C automatically and the crossover stays at 200 rad/s -- the
+% closed-loop response, and therefore every percentage and settling-time limit in
+% P.spec, is identical to the 8 kW version. Only the regression baselines had to
+% be regenerated, because those store absolute volts and amps.
 % Capacitor balance:  C * dVdc/dt = i_src - i_out
 %   i_src  current injected by the PV and wind sources        (disturbance input)
 %   i_out  current drawn by the grid-side inverter            (control variable)
-P.plant.C      = 2200e-6;   % DC-link capacitance                          [F]
+P.plant.C      = 44e-3;     % DC-link capacitance                          [F]
 P.plant.tau_i  = 1e-3;      % inner current-loop time constant             [s]
 P.plant.Vdc0   = 700;       % initial DC bus voltage                       [V]
 
@@ -35,7 +42,7 @@ P.plant.Vdc0   = 700;       % initial DC bus voltage                       [V]
 % Error convention is  e = Vdc - Vdc_ref  (measured MINUS reference).
 % See docs/DESIGN_NOTES.md "Sign convention" for why this is not a typo.
 P.ctrl.Vdc_ref = 700;       % DC bus voltage setpoint                      [V]
-P.ctrl.Imax    = 20;        % inverter current limit, symmetric            [A]
+P.ctrl.Imax    = 400;       % inverter current limit, symmetric            [A]
 
 % Tuning rule for both variants:
 %   Kp = C * wc        places the loop crossover at wc
@@ -44,7 +51,7 @@ P.ctrl.Imax    = 20;        % inverter current limit, symmetric            [A]
 switch variant
     case "nominal"
         % wc = 200 rad/s (~32 Hz), phase margin ~73 deg.
-        % Measured against a 10 A source-current step: 2.85 % peak deviation
+        % Measured against a 200 A source-current step: 2.85 % peak deviation
         % (spec 5 %) and 62 ms settling (spec 100 ms). Both have real margin.
         %
         % An earlier attempt at wc = 100 was rejected: it overshot 5.54 %, just

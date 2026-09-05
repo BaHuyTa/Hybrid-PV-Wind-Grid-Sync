@@ -2,6 +2,11 @@
 
 **Owner:** Ba Huy Ta · **Weeks:** W5–W6 · **Team 1, Smart Grid Technologies**
 
+> **Revised 5 Sep 2026 — rated power 3 kW → 60 kW** (Option B site scale, see
+> [decisions.md](decisions.md)). Only `wp.P_elec` changed in `params/windParams.m`;
+> every value in §3 is re-derived from it. Topology, the Cp set, the interface contract
+> and the bandwidth separation are all unchanged — see the notes in §3 and §4.
+
 ## 1. Topology decision
 
 ```
@@ -42,19 +47,24 @@ Fallback if it hunts under turbulence: optimal torque control, T* = k·ω². Fla
 
 | Quantity | Value | Basis |
 |---|---|---|
-| Rated electrical power | 3 kW | proposal |
+| Rated electrical power | 60 kW | Option B site scale, 5 Sep 2026 |
 | Rated wind speed | 12 m/s | assumed |
 | Cut-in wind speed | 4 m/s | set by max boost duty 0.85 |
 | Air density ρ | 1.225 kg/m³ | |
-| Rotor radius R | 1.445 m (D = 2.89 m) | from P = 0.5ρACp v³ at ~3.3 kW mechanical |
-| Rated shaft speed | 67.3 rad/s (642 rpm) | λ_opt·v/R |
-| Pole pairs p | 10 | direct drive, f_e ≈ 107 Hz |
-| PM flux linkage λ_pm | 0.360 Wb | sets V_rect ≈ 400 V at rated |
-| Inertia J | 4.42 kg·m² | H = 3 s |
+| Rotor radius R | 6.463 m (D = 12.93 m) | from P = 0.5ρACp v³ at ~66.7 kW mechanical |
+| Rated shaft speed | 15.04 rad/s (144 rpm) | λ_opt·v/R |
+| Pole pairs p | 10 | direct drive, f_e ≈ 23.9 Hz |
+| PM flux linkage λ_pm | 1.609 Wb | sets V_rect ≈ 400 V at rated |
+| Inertia J | 1768 kg·m² | H = 3 s (unchanged — see note below) |
 | Rectified DC voltage | 400 V rated, 133 V at cut-in | 1.35·V_ll |
 | Boost duty | 0.429 rated, 0.810 at cut-in | 1 − V_in/V_out, V_out = 700 V |
 
 Duty stays inside 0.85 across the whole operating range, so the boost never saturates.
+
+**Both duty figures are unchanged by the rescale.** Rectified voltage, bus voltage and
+duty are all set by ratios that do not depend on rated power — only currents scale. The
+same holds for the inertia constant H, deliberately held at 3 s, so the mechanical
+response time in §4 is unchanged too.
 
 All values above verified by `wind_model_check.m` (MATLAB R2026a), cross-checked independently.
 
@@ -121,4 +131,8 @@ Deliver both by end of W6 so W7 tuning is never blocked on model choice.
 2. Hoang — agree `i_dc` + telemetry bus as the interface, and that you own C_dc?
 3. Aqib / Duc — is the ~10× separation between the DC-link loop and our source loops enough headroom
    for your cascade tuning, or do you want us slower?
-4. Anyone — is 12 m/s rated / 4 m/s cut-in acceptable, or do we match a real 3 kW turbine datasheet?
+4. Anyone — is 12 m/s rated / 4 m/s cut-in acceptable, or do we match a real 60 kW turbine
+   datasheet? At 12 m/s rated the sizing gives a 12.9 m rotor, which is small for 60 kW;
+   a real 60 kW machine is nearer 18-21 m because its rated wind speed is lower. The
+   sizing is internally consistent, but the rated-speed assumption is now doing more work
+   than it was at 3 kW.
