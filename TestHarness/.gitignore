@@ -1,0 +1,26 @@
+# Simulink / MATLAB build artifacts.
+# These regenerate on every run and are binary, so they merge for nobody.
+# setupHarness.m redirects most of them to LOCALAPPDATA, but anyone who runs
+# a model without calling setupHarness first will drop them here again.
+slprj/
+slcov_output/
+*.slxc
+*.autosave
+*.asv
+*.mex*
+codegen/
+
+# Simulink Test harness registration. Harnesses are recreated by model_test,
+# and buildDCLinkLoop() rewrites the model from scratch, so a committed
+# harnessInfo points at things that no longer exist.
+*_harnessInfo.xml
+*_draft_harness.slx
+*_final_harness.slx
+
+# Generated reports. Timestamped, one per run, and reproducible with
+# runAll(Report = true) -- keep the generator in git, not its output.
+results/reports/
+
+# Regression baselines ARE tracked on purpose. A baseline is the reference
+# a regression check compares against, so it has to travel with the code:
+# !results/baseline/

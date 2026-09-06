@@ -7,9 +7,9 @@
 %   1. PMSG stator current. The 6-pulse bridge draws non-sinusoidal current;
 %      spec section 1 calls that an "accepted limitation". This puts a number
 %      on it: THD and the 5th/7th/11th/13th, the 6-pulse signature.
-%   2. Current into DC link 2. What inverter 2's DC-link loop actually sees
-%      from the wind branch: the 6th-harmonic bridge ripple and the 10 kHz
-%      switching ripple. Integration needs this to size C_dc2.
+%   2. Current into the shared DC bus. What the inverter's DC-link loop actually
+%      sees from the wind branch: the 6th-harmonic bridge ripple and the 10 kHz
+%      switching ripple. Integration checks C_dc against this.
 %   3. Boost inductor current. The switching ripple the averaged model cannot
 %      show, at the frequency and magnitude the sizing predicts.
 %
@@ -30,7 +30,7 @@ wp = windParams();
 w_mpp  = wp.lam_opt*wp.v_rated/wp.R;
 f_e    = wp.p*w_mpp/(2*pi);                    % electrical frequency at rated
 n_cyc  = 8;                                    % whole cycles in the FFT window
-T_settle = 0.20;                               % > 6 stator time constants (Ls/Rs = 32 ms)
+T_settle = max(0.20, 7*wp.Ls/wp.Rs);           % > 6 stator time constants at any rating (Ls/Rs = 36 ms at 60 kW)
 T_stop = T_settle + n_cyc/f_e;                 % settle, then the window
 t = (0:1e-4:T_stop)';  v = wp.v_rated*ones(size(t));
 P_ref = wp.k_opt*w_mpp^3;
@@ -47,7 +47,7 @@ fprintf('simulated %.2f s in %.0f s wall; FFT window %.4f s = %d cycles at %.1f 
 
 sl  = out.simlog.PowerStage;
 sig = struct( ...
-    'name', {'PMSG stator current i_a', 'current into DC link 2', 'boost inductor current'}, ...
+    'name', {'PMSG stator current i_a', 'current into DC bus', 'boost inductor current'}, ...
     'ts',   {sl.PMSG.i_a.series, sl.sense_idc.I.series, sl.L_boost.i.series});
 
 %% ---- FFT over the last n_cyc whole electrical cycles --------------------
@@ -97,7 +97,7 @@ if ~exist(outDir, 'dir'), mkdir(outDir); end
 exportgraphics(f, fullfile(outDir, 'thd_spectra.png'), 'Resolution', 130);
 
 %% ---- Report -------------------------------------------------------------
-s = R.PMSGStatorCurrentI_a;  d = R.currentIntoDCLink2;  l = R.boostInductorCurrent;
+s = R.PMSGStatorCurrentI_a;  d = R.currentIntoDCBus;  l = R.boostInductorCurrent;
 fprintf('Stator current:  fundamental %.1f A at %.1f Hz | THD %.1f%% | 3rd %.1f%%  5th %.1f%%  7th %.1f%%  11th %.1f%%  13th %.1f%%\n', ...
         s.I1, s.f1, s.thd, s.h3, s.h5, s.h7, s.h11, s.h13);
 if s.thd > 60
@@ -109,10 +109,11 @@ else
     fprintf('                 gives a long commutation overlap that rounds the 120-degree current blocks. This is the\n');
     fprintf('                 "accepted limitation" of spec section 1, quantified.\n');
 end
-fprintf('DC link 2 in:    mean %.1f A | 6 f_e ripple %.2f A | switching ripple %.2f A at %.0f Hz\n', ...
+C_dc = 44e-3;   % F, the shared bus capacitor: TestHarness/config/harnessParams.m, P.plant.C
+fprintf('DC bus in:       mean %.1f A | 6 f_e ripple %.2f A | switching ripple %.2f A at %.0f Hz\n', ...
         d.dc, d.h6, d.I_sw, d.f_sw_meas);
-fprintf('                 (the boost diode conducts in pulses, so that 10 kHz component is what C_dc2 absorbs:\n');
-fprintf('                  with C_dc2 = 1 mF it is %.2f V of ripple; integration sizes C_dc2 from this)\n', d.I_sw/(2*pi*d.f_sw_meas*1e-3));
+fprintf('                 (the boost diode conducts in pulses, so that 10 kHz component is what C_dc absorbs:\n');
+fprintf('                  with C_dc = %.0f mF it is %.3f V of ripple; integration checks C_dc against this)\n', C_dc*1e3, d.I_sw/(2*pi*d.f_sw_meas*C_dc));
 fprintf('Inductor:        mean %.1f A | switching ripple %.2f A at %.0f Hz (predicted pk-pk %.1f A -> amplitude ~%.1f A)\n', ...
         l.dc, l.I_sw, l.f_sw_meas, 0.52*340/(wp.L_boost*wp.f_sw), 0.52*340/(wp.L_boost*wp.f_sw)/2);
 
@@ -125,7 +126,7 @@ C = {'window is settled: stator DC < 3% of fundamental', s.dc < 0.03*s.I1,      
      '6-pulse signature: 5th > 7th > 11th > 13th',    s.h5 > s.h7 && s.h7 > s.h11 && s.h11 > s.h13,      sprintf('%.1f > %.1f > %.1f > %.1f %%', s.h5, s.h7, s.h11, s.h13)
      'inductor 10 kHz component matches its pk-pk',   abs(l.f_sw_meas - wp.f_sw) < 2/T_w && abs(l.I_sw - I_tri) < 0.3*I_tri, ...
                                                       sprintf('%.1f A at %.0f Hz vs %.1f A from %.1f A pk-pk', l.I_sw, l.f_sw_meas, I_tri, l.pp)
-     'bridge ripple does not reach DC link 2 (< 10%)', d.h6 < 0.10*d.dc,                                  sprintf('6 f_e: %.2f A of %.1f A mean', d.h6, d.dc)};
+     'bridge ripple does not reach the DC bus (< 10%)', d.h6 < 0.10*d.dc,                                 sprintf('6 f_e: %.2f A of %.1f A mean', d.h6, d.dc)};
 npass = 0;
 for k = 1:size(C,1)
     tag = 'FAIL'; if C{k,2}, tag = 'PASS'; npass = npass + 1; end

@@ -14,7 +14,7 @@
 %   4. No design parameter is a numeric literal. Every value that sizes the
 %      plant or the converter must be a wp.* reference. (The switched boost
 %      diode sat at the Simscape default 0.3 ohm until 4 Sep: 7 W at 3 kW,
-%      600 W at 30 kW.) The list of parameter names checked is explicit
+%      2.7 kW at 60 kW.) The list of parameter names checked is explicit
 %      below; Simscape blocks carry dozens of thermal/tolerance defaults that
 %      the model does not use, and those are deliberately not flagged.
 %

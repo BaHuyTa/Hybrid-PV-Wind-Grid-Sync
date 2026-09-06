@@ -5,7 +5,7 @@
 % (mode 1), which does not use the duty seed or the perturbation settings, so
 % without the override this script would measure the torque controller 35 times
 % and call it a sweep. (It did exactly that after the default changed - fixed
-% during the 30 kW rescale, 4 Sep 2026.)
+% during the 30 kW rescale, 4 Sep 2026; re-run at 60 kW, 6 Sep 2026.)
 %
 % Two questions, in order:
 %   1. What can the plant actually deliver? An open-loop duty sweep gives the

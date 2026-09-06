@@ -1,0 +1,46 @@
+>> runPVAll
+
+PV boost + P&O MPPT stage -- spec check [nominal]
+source: Belal's PV/solarsimulink.slx    dD = 0.002 / 10 ms = 0.20 duty/s
+================================================================================================
+scenario            track[%]   reacq[s]   rail[-]    rip[%]  busDev[V]   Pmin[W]   verdict
+------------------------------------------------------------------------------------------------
+full_sun               100.0         --     0.430      0.01       12.1      4750   PASS
+partial_600            100.0         --     0.288      0.02      177.9      1770   FAIL: busBand
+low_light_250           98.8         --     0.048      3.42      406.8       307   FAIL: ripple, busBand
+cloud_step_down        100.0      0.943     0.230      0.01      227.2      1414   FAIL: reacquire, busBand
+cloud_step_up          100.0      0.871     0.428      0.02       15.3      1230   FAIL: reacquire
+cloud_ramp             100.0      1.239     0.150      0.01      281.2       908   FAIL: reacquire, busBand
+------------------------------------------------------------------------------------------------
+1 of 6 scenarios meet spec.
+
+FINDINGS
+------------------------------------------------------------------------------------------------
+1.  Reacquisition too slow in: cloud_step_down, cloud_step_up, cloud_ramp (worst 1.24 s against a 0.50 s limit).
+    P&O moves duty by 0.002 every 10 ms, so the stage can slew 0.20 duty per second
+    and no faster. This is a rate limit, not a tuning error -- raising dD or
+    shortening the perturbation period are the only levers.
+
+2.  DC bus outside 700 +/- 5% in: partial_600, low_light_250, cloud_step_down, cloud_ramp.
+    The boost output feeds a fixed 98 ohm resistor, so bus voltage is whatever the
+    duty and the available power make it. Nothing regulates it. The integrated
+    system holds this bus at 700 V with the grid-side loop -- see
+    config/harnessParams.m. Until this stage is tested against a stiff bus rather
+    than a resistor, its MPPT behaviour here does not predict its behaviour there.
+
+3.  Steady-state power ripple over 2% in: low_light_250.
+    P&O dithers around the peak by construction; the size of the dither is set by
+    dD = 0.002. Reducing it lowers ripple and slows reacquisition -- the two specs
+    pull in opposite directions and dD is the single knob between them.
+
+
+ans = 
+
+  struct with fields:
+
+       variant: "nominal"
+      slewRate: 0.2000
+    nScenarios: 6
+         nPass: 1
+     scenarios: ["full_sun"    "partial_600"    "low_light_250"    "cloud_step_down"    "cloud_step_up"    "cloud_ramp"]
+       allPass: [1 0 0 0 0 0]

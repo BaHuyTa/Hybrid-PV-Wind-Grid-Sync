@@ -20,8 +20,8 @@
 %   - a duty feedforward that silently cancelled the current loop
 %   - single-sample-per-period current sensing reading the ripple minimum
 %     instead of the mean, biasing the current ~half the ripple high
-%   - (30 kW rescale) the boost diode left at Simscape's default 0.3 ohm:
-%     7 W at 3 kW, 600 W at 30 kW. Now wp.Ron_dev, shared by every device.
+%   - (30 kW rescale, 4 Sep) the boost diode left at Simscape's default 0.3 ohm:
+%     7 W at 3 kW, 2.7 kW at 60 kW. Now wp.Ron_dev, shared by every device.
 %
 % Usage:
 %   addpath(genpath('params'), genpath('scripts'), genpath('models'));
@@ -34,16 +34,24 @@ wp = windParams();
 
 v_test = wp.v_rated;
 w_mpp  = wp.lam_opt*v_test/wp.R;
-T_stop = 0.2;                       % 2000 switching periods
+% The comparison window is the last quarter of the run, and it has to sit
+% after the stator's DC-offset transient has decayed - that takes ~6 Ls/Rs,
+% which is 32 ms at 30 kW but 36 ms at 60 kW. A fixed 0.2 s run passed at
+% 30 kW and failed at 60 kW (i_L -4%, P_dc -3%) for no reason but this, so
+% the run length now follows the time constant. Minimum 2000 switching periods.
+T_stop = max(0.2, 8*wp.Ls/wp.Rs);
 t = (0:1e-4:T_stop)';
 v = v_test*ones(size(t));
 
 P_ref = wp.k_opt*w_mpp^3;           % torque-law power reference at this speed
 
-% Seed the inductor current near its operating point and make the rotor an
-% effectively infinite flywheel. Both scale with the rating, so neither is a
-% literal number.
-ov = struct('w_init', w_mpp, 'iL_init', 0.8*P_ref/wp.V_rect_r, 'J', 1e4*wp.J);
+% Seed every state at the pinned operating point - inductor current, rotor
+% speed (an effectively infinite flywheel) and the rectifier capacitor. Left
+% at 0 V, C_rect draws an inrush through the bridge whose DC offset in the
+% stator is what the window above has to outlast. All scale with the rating,
+% so none is a literal number.
+ov = struct('w_init', w_mpp, 'iL_init', 0.8*P_ref/wp.V_rect_r, 'J', 1e4*wp.J, ...
+            'V_rect_init', 1.35*(wp.p*w_mpp*wp.lam_pm)*sqrt(3)/sqrt(2));
 
 fprintf('=== Averaged vs switched, rotor pinned at %.1f rad/s (%g m/s) ===\n', ...
         w_mpp, v_test);

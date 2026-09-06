@@ -7,99 +7,30 @@ Product Owner: Mohammad Abuhilaleh · Coordinators: Valerie Gay, Dayna Sais, Can
 
 ## What it is
 
-> **Architecture change — product-owner meeting, 3 September 2026.** The system is
-> now **AC-coupled**, and the wind branch is rated **30 kW** (was 3 kW). AC coupling is
-> the product owner's recommendation. The 30 kW figure is the team's; he asked for a
-> demand-based reason behind every rating, which is what [Design basis](#design-basis)
-> below is for.
-> Each source now has its own DC link and its own grid-tie inverter, and the two
-> inverters meet on the AC bus at the point of common coupling. The shared 700 V
-> DC bus is gone. See [docs/dc_vs_ac_coupled.png](docs/dc_vs_ac_coupled.png) for
-> the two topologies side by side. Everything below reflects the new design; the
-> roadshow deck of 2 September still shows the old one.
+DC-coupled design, sized for a **light-industrial site behind the meter**: a factory
+with ~250 kW peak demand on a 400 V connection. A 120 kWp PV array feeds a boost
+converter under Perturb & Observe MPPT; a 60 kW PMSG wind subsystem feeds the same bus
+through a rectifier and its own boost. The shared DC link exports through **one**
+three-phase SVPWM inverter using dq-frame PI current control and an SRF-PLL.
+Anti-islanding uses Sandia Frequency Shift, assessed by non-detection zone analysis
+against AS/NZS 4777.2:2020.
 
-AC-coupled design. A 5 kW PV array feeds a boost converter under Perturb & Observe
-MPPT into its own DC link and inverter. A 30 kW PMSG wind subsystem feeds a rectifier
-and boost into a second DC link and a second inverter. Each inverter is a three-phase
-SVPWM voltage-source inverter with an LCL filter, dq-frame PI current control and an
-SRF-PLL; the two connect in parallel on the AC bus. Anti-islanding uses Sandia
-Frequency Shift on each inverter, assessed by non-detection zone analysis against
-AS/NZS 4777.2:2020.
+Ratings: 120 kWp PV + 60 kW wind → 700 V DC link → 150 kVA inverter → 400 V, 50 Hz
+grid, with a 250 kW site load and an RLC test load at the PCC.
 
-Indicative ratings: 5 kW PV + 30 kW wind, each through its own 700 V DC link and
-inverter → 400 V, 50 Hz grid.
+![Architecture](docs/architecture.svg)
 
-```
-PV array ──► boost + P&O MPPT ──► DC bus (700 V) ──► interlinking converter ──┐
-                                    │                 (VSI + LCL, PLL, dq, SFS)  │
-                                  DC load                                        ├──► AC bus ──► grid (PCC)
-wind ──► PMSG ──► rectifier ──► boost + MPPT ──► DC link 2 ──► inverter 2 ──────┘      │
-        └──────── the wind AC/DC/AC converter ─────────────────────────┘             AC load
-```
-
-This is the structure the product owner asked for on 3 September: a grid-connected
-**microgrid**, with a DC bus that carries the PV and a DC load, an AC bus that carries
-the AC load and the grid connection, an interlinking converter between the two buses,
-and the wind arriving at the AC bus through its own AC/DC/AC converter.
-
-His reasons for AC coupling, recorded so the design has a stated rationale:
-
-- **Inverter capacity and cost.** One inverter rated for the sum of both sources is
-  expensive and impractical; two smaller ones split the duty.
-- **Single point of failure.** With one inverter, a trip or a maintenance outage takes
-  all generation off the grid. Two inverters give N-1: lose one, the other keeps exporting.
-- **Convention.** Wind is normally connected to the AC bus through AC/DC/AC; PV through
-  DC/DC to a DC bus. He was open to DC coupling only with a specific reason, and we had none.
-
-What AC coupling changes for the build: two PLLs, two dq current loops, two DC-link
-loops and two SFS instances instead of one of each. The inverter is designed once and
-instantiated twice at different ratings (5 kW and 30 kW). The interaction between two
-grid-tied inverters on one PCC — which the DC-coupled design avoided by construction —
-is now part of the problem, and it is where the weak-grid (SCR = 3) work lands. Loads
-and power sharing are new work items; see Design basis.
-
-## Design basis
-
-> **Draft, 4 September 2026 — for the team to argue with at the next product-owner
-> meeting.** He asked where the numbers come from: "when you design anything, you start
-> from the demand." We had no answer. This is a first one.
-
-**Demand (assumed).** A rural site at the end of a weak feeder — the reason for the
-SCR = 3 criterion — with a farm workshop, cold store and a few houses:
-
-| Load | Where | Peak | Typical daytime |
-|---|---|---|---|
-| AC load (workshop, cold store, houses) | AC bus | 25 kW | 12–15 kW |
-| DC load (lighting, comms, battery charging) | DC bus | 3 kW | 2 kW |
-
-**Capacity.** 35 kW nameplate against a 28 kW peak, so the site can meet its own peak
-with either source partly available and export the rest. Wind carries the base
-(30 kW) because a site like this is chosen for its wind resource; PV (5 kW) sits on the
-DC bus where it directly serves the DC load and shaves the daytime peak. Nothing here is
-measured. If the team prefers a different demand, the split follows from it, and every
-wind-side number follows from `wp.P_elec` in `params/windParams.m`.
-
-**Power sharing.** Grid-connected, both sources run at their maximum power point and the
-grid absorbs the surplus or covers the deficit — no sharing decision is needed. The
-product owner's "each source shares in proportion to its capacity" applies when the
-export is limited (a weak grid, a curtailment order, or an islanded microgrid): then the
-30 kW and 5 kW sources back off 6:1. That needs a power-limit input on each source — the
-wind branch does not have one yet, see the wind spec §4 — and a sharing rule in the
-control layer. It is a W7 decision for the control pair.
-
-**Questions he asked that still need written answers:**
-
-- Why 5 kW and 30 kW — this section, once the team agrees the demand.
-- Why a boost and not a buck on the PV — Belal. Short version: a 5 kW string sits well
-  below 700 V, so the DC-bus voltage is above the array voltage at every irradiance.
-- Where the loads are and who models them — integration (Hoang), with the control pair.
+The 150 kVA rating is deliberate: it sits under the 200 kVA ceiling of
+AS/NZS 4777.2, so that standard — and every success criterion below — still applies.
+See [docs/decisions.md](docs/decisions.md) for why this scale, why one inverter, and
+what was deliberately left out.
 
 ## Success criteria
 
 | Metric | Target |
 |---|---|
 | Current THD at rated output | < 5% |
-| DC-link voltage deviation (each DC link) | < 5%, recover within 200 ms |
+| DC-link voltage deviation | < 5%, recover within 200 ms |
 | Inner current loop settling | < 2 ms, overshoot < 10% |
 | PLL re-lock after 30° phase jump | < 100 ms |
 | Islanding detect + disconnect | < 2 s |
@@ -108,18 +39,14 @@ control layer. It is a W7 decision for the control pair.
 ## Layout
 
 ```
-docs/         proposal, subsystem specs, traceability.md (criterion -> test -> evidence)
+docs/         proposal, subsystem specs
 params/       shared parameter files — single source of truth
 models/
   wind/       turbine, PMSG, rectifier, boost      Huy
   pv/         PV array, boost, MPPT                Belal
   control/    SRF-PLL, dq current loop, DC-link    Aqib, Duc
-              loop, power sharing - one inverter
-              design, two instances
-  protection/ SFS anti-islanding (x2), NDZ         Redhwan
-  integration/ top-level model, DC bus + DC load,  Hoang
-              DC link 2, AC bus + AC load, PCC,
-              harness
+  protection/ SFS anti-islanding, NDZ analysis     Redhwan
+  integration/ top-level model, DC link, harness   Hoang
 scripts/      analysis + verification scripts
 tests/scenarios/  test cases and expected results
 ```
@@ -137,14 +64,13 @@ tests/scenarios/  test cases and expected results
 
 ## Getting started
 
-Requires MATLAB R2026a with Simulink, Simscape and **Simscape Electrical**.
-Control System Toolbox and Simulink Control Design are used for loop tuning.
+Requires MATLAB R2026a with Simulink, Simscape, and **Simscape Electrical
+(Specialized Power Systems)**. Control System Toolbox and Simulink Control Design
+are used for loop tuning.
 
-> **Correction (Sep 2026):** this previously said *Specialized Power Systems*.
-> That product is **not installed** on the lab image — `powerlib` does not exist
-> there. The wind switched model is built from foundation Simscape Electrical
-> (`ee_lib`), which is present and sufficient. If your subsystem plan assumed SPS
-> blocks, check before you build.
+> **Check before you build on Specialized Power Systems:** `powerlib` is not on the
+> lab image. The wind models need only foundation Simscape Electrical (`ee_lib`),
+> which is present.
 
 ```matlab
 addpath(genpath('params'), genpath('scripts'), genpath('models'));
@@ -153,8 +79,13 @@ wind_model_check        % sizing arithmetic only - no Simulink needed
 wind_model_lint         % library links resolved, no literal design parameters
 wind_scenarios          % 6 scenarios, 10 checks, both MPPT modes
 wind_fidelity_check     % averaged vs switched cross-validation
-wind_thd_check          % FFT / THD of the switched model (stator, DC link 2, inductor)
+wind_thd_check          % FFT / THD of the switched model (stator, DC bus, inductor)
 ```
+
+The wind branch is built and tested standalone at 60 kW: two fidelities, cross-validated
+to under 1%, with a 6-scenario / 10-check harness. See
+[docs/wind-model-spec.md](docs/wind-model-spec.md) §6a and
+[docs/traceability.md](docs/traceability.md).
 
 ## Working on models
 
@@ -189,52 +120,34 @@ Loops are tuned inside-out. The separation is what makes that valid:
 
 | Loop | Owner | Speed |
 |---|---|---|
-| Grid-side inner current loop (per inverter) | Aqib, Duc | 2 ms settling |
-| DC-link voltage loop (per inverter) | Aqib, Duc | ~200 ms recovery |
+| Grid-side inner current loop | Aqib, Duc | 2 ms settling |
+| DC-link voltage loop | Aqib, Duc | ~200 ms recovery |
 | Source-side boost + MPPT | Huy, Belal | ~1 s |
-| Wind rotor (mechanical) | Huy | ~4.8 s measured — unchanged at 30 kW |
-
-The wind branch is built and tested standalone: two fidelities, cross-validated to under 1%, with
-a 6-scenario / 10-check harness. See [docs/wind-model-spec.md](docs/wind-model-spec.md) §6a.
+| Wind rotor (mechanical) | Huy | ~4.8 s measured |
 
 The rotor is ~24× slower than the DC-link loop, so the control pair can tune the
 cascade without modelling wind dynamics. It also means instability found at low SCR
-is genuinely a grid-side effect rather than a plant artifact. The 30 kW rescale did
-not move this number: inertia constant, tip-speed ratio and the Cp curve are all
-unchanged, so the rotor's response in seconds is identical.
-
-With AC coupling the wind branch no longer disturbs the PV inverter through a shared
-bus. Its transients reach the PV branch only through the AC bus, as a change in the
-power inverter 2 exports — which is what the SCR sweep is for.
+is genuinely a grid-side effect rather than a plant artifact.
 
 ## Open assumptions
 
 Not yet confirmed with the team — flagged so nobody builds on them unknowingly:
 
 - Wind rated speed **12 m/s** and cut-in **4 m/s** are assumed, not from the
-  proposal. All wind sizing follows from them. At 30 kW that gives a **9.1 m rotor**
-  turning at **203 rpm**. Commercial 30 kW turbines are larger and slower: Aeolos-H
-  30 kW is 15.6 m rated at 9 m/s, Zenia 30 kW is 13.8 m, Kodair KW30 is 14.1 m at
-  ~11 m/s, Renery RW-30 is 13.5 m rated at 10 m/s and 90 rpm. Rating ours at
-  **10 m/s** instead would give a 12 m rotor at 129 rpm — inside that envelope. It is
-  a one-line change in `params/windParams.m`, but it moves every wind-side number,
-  so it is a team decision. See [docs/wind-model-spec.md](docs/wind-model-spec.md) §7.
-- The 30 kW PMSG has **16 pole pairs** (was 10 at 3 kW) so the electrical frequency
-  stays at 54 Hz at the slower rated speed. Commercial 30 kW direct-drive PM
-  generators are offered at 200–500 rpm; a 200 rpm unit wound for 50 Hz has 15 pole
-  pairs, so this is a conventional choice. Only the flux linkage depends on it.
+  proposal. All wind sizing follows from them, and at 60 kW that assumption now does
+  more work than it did at 3 kW: it gives a 12.9 m rotor where a real 60 kW machine is
+  nearer 18–21 m. Alternative: match a real 60 kW turbine datasheet.
 - Wind uses a passive diode bridge + boost rather than an active rectifier. See
-  [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning. The
-  architecture diagram labels the wind front end just "Rectifier"; the boost is
-  inside that box, and it is what does the MPPT.
-- **The loads and the demand in Design basis are placeholders.** The product owner wants
-  every rating traced to a demand; the table there is the first attempt and nobody has
-  agreed it yet.
-- **DC link 2 is 700 V**, matching the PV DC bus, so the two inverters can be one design.
-  Its capacitor is owned by integration, not by the wind branch — same rule as before,
-  now applied per link. Needs Hoang's and the control pair's agreement.
-- **The wind MPPT default is now optimal torque control, not P&O.** P&O tracks 96-99% in steady
-  and turbulent wind but only 74% through a sustained ramp, because rising wind makes every
-  perturbation look successful. Both are built and selectable (`wp.mppt_mode`); P&O is not
-  deleted. This affects the claim that both plants share one MPPT algorithm, so it needs a team
-  decision — see [docs/wind-model-spec.md](docs/wind-model-spec.md) §2.
+  [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning.
+- The 60 kW PMSG has **20 pole pairs** so the electrical frequency stays near 48 Hz
+  at the slower 144 rpm rated speed. Only the flux linkage depends on it.
+- **The wind MPPT default is optimal torque control, not P&O.** P&O tracks 96-99% in
+  steady and turbulent wind but only ~74% through a sustained ramp, because rising wind
+  makes every perturbation look successful. Both are built and selectable
+  (`wp.mppt_mode`). This affects the claim that both plants share one MPPT algorithm,
+  so it needs a team decision — see [docs/wind-model-spec.md](docs/wind-model-spec.md) §2.
+- The site load is a constant 250 kW PQ load. A real duty cycle would be more
+  convincing but nothing in the success criteria measures it.
+- SCR = 3 is reached by adding series grid impedance, not by a real weak connection —
+  a 150 kVA plant on an LV feeder sees a much higher SCR in practice. Present the SCR
+  sweep as a per-unit ratio study, not as a claim about this site.

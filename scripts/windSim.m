@@ -12,9 +12,9 @@ function [tl, logs, out] = windSim(t, v_wind, opts)
 % is the full Simulink.SimulationOutput; with opts.simscape_log it carries
 % out.simlog, the Simscape network log (switched model only).
 %
-% The DC link is represented as a stiff voltage source at wp.V_dc. That is the
-% correct stand-in here: AC-coupled, the wind branch feeds its own DC link
-% (DC link 2), which inverter 2's voltage loop holds at wp.V_dc. The capacitor
+% The DC bus is represented as a stiff voltage source at wp.V_dc. That is the
+% correct stand-in here: DC-coupled, the wind branch feeds the shared 700 V bus,
+% which the 150 kVA inverter's voltage loop holds at wp.V_dc. The capacitor
 % is owned by the integration model (Hoang), and the whole point of the
 % bandwidth separation argument is that the wind branch sees the link as
 % constant.
