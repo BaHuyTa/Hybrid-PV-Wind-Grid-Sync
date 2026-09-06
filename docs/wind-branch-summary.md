@@ -1,8 +1,7 @@
 # Wind branch — one-page status for product-owner meeting 3
 
 **Ba Huy Ta · 6 September 2026 · Team 1, Smart Grid Technologies**
-Repository: github.com/BaHuyTa/Hybrid-PV-Wind-Grid-Sync, branch `wind/ac-coupled-30kw`
-(branch name predates the 5 Sep decision; the content is the DC-coupled 60 kW design)
+Repository: github.com/BaHuyTa/Hybrid-PV-Wind-Grid-Sync, branch `wind/dc-coupled-60kw`
 
 ## What exists
 
