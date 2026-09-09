@@ -300,6 +300,10 @@ models/wind/
                           windParams(), library locked, no literal design parameters
   wind_thd_check.m        FFT / THD on the switched model: stator current, current
                           into the DC bus, boost inductor current (6/6 checks)
+  wind_tidy_layout.m      cosmetic only: re-lays out the root diagrams (power path
+                          left-to-right, shared signals and telemetry on Goto/From
+                          tags, header notes). Never auto-arranges a Simscape
+                          subsystem - that split a physical node once.
 ```
 
 ```matlab
