@@ -23,11 +23,6 @@ grid, with a 250 kW site load and an RLC test load at the PCC.
 A fuller single-line diagram, with the converter topology, LCL filter, breakers and
 symbol legend, is at [docs/single-line-diagram.png](docs/single-line-diagram.png).
 
-> **Erratum on that SLD:** the wind block is labelled `R = 10.3 m`. The correct rotor
-> radius is **6.46 m** — 10.3 m was derived at a 10 m/s rated wind speed, but the spec
-> uses 12 m/s. `params/windParams.m` and `scripts/wind_model_check.m` are correct.
-> Build to 6.46 m. The label will be fixed on the next revision of the drawing.
-
 The 150 kVA rating is deliberate: it sits under the 200 kVA ceiling of
 AS/NZS 4777.2, so that standard — and every success criterion below — still applies.
 See [docs/decisions.md](docs/decisions.md) for why this scale, why one inverter, and
