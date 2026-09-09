@@ -164,7 +164,7 @@ ip.grid_XR    = 15;                       % -   source X/R
 % inv_model_check.m prints all three margins.
 ip.f_i_bw = 500;                               % Hz  current loop bandwidth
 ip.w_i    = 2*pi*ip.f_i_bw;
-ip.Kp_i   = ip.w_i*ip.L_f;                     % 1.067 V/A
+ip.Kp_i   = ip.w_i*ip.L_f;                     % 1.197 V/A
 ip.Ki_i   = ip.w_i*ip.R_f;                     % 16.8 V/(A.s) - zero at R/L
 ip.wL     = 2*pi*ip.f_grid*ip.L_f;             % ohm, the dq cross-coupling term
 

@@ -112,6 +112,34 @@ SCR 6.7 at 150 kVA — a weak grid nobody asked for, and it destabilises the
 current loop through the PCC voltage feedforward. `ip.grid_Z_opt` sets it
 explicitly (0 for tuning, 1 for the SCR sweep).
 
+## Checked against Belal's PV model (9 Sep)
+
+`models/pv/solarsimulink.slx` landed after this branch was built, so every
+shared number was re-read out of his model rather than assumed. **Nothing in
+`invParams.m` changes.**
+
+| interface | inverter | Belal's PV | |
+|---|---|---|---|
+| DC bus | `ip.V_dc` = 700 V | `Rload_placeholder` = 4.08 Ω → 700 V at 120 kW | agrees |
+| switching frequency | `ip.f_sw` = 10 kHz | PWM carrier `[0 1e-4]` → 10 kHz | agrees |
+| array rating | — | 723s × 48p, ≈360 V / 330 A ≈ 120 kW at STC | matches the 120 kWp in the root README |
+| boost duty at MPP | — | 1 − 360/700 = 0.49 | mid-range, well inside the P&O 0.05–0.95 clamp |
+
+The PV boost runs into a placeholder resistor, not the shared bus — Belal's own
+figure annotates it *"Real 700 V bus = inverter's job"*. So the two models do
+not yet meet electrically and there is no bus-regulation conflict to resolve;
+the join happens in Hoang's integration model, and the loop that holds 700 V is
+the DC-link loop, not this branch.
+
+**One thing the team should look at.** 120 kWp PV + 60 kW wind is 180 kW into a
+150 kVA inverter — a DC/AC ratio of 1.2. `docs/decisions.md` records that as
+deliberate ("PV and wind do not peak together"), so it is not a defect, but it
+does mean the inverter clips when they *do* coincide, and nothing currently
+tests that. `ip.I_pk` = 306.2 A peak (216.5 A rms, 214 A on the DC side) is the
+limit that would engage. Note that `TestHarness/config/harnessParams.m` sets
+`P.ctrl.Imax` = 400 A — about 1.9× the inverter's actual DC-side rating — so the
+harness as configured would never exercise the clip. Hoang's call.
+
 ## Open items
 
 - **Who owns `Iq_ref`?** Held at 0 (unity power factor). AS/NZS 4777.2 has
@@ -123,8 +151,9 @@ explicitly (0 for tuning, 1 for the SCR sweep).
   injection, carrier comparison, dead time) built so the filter could be
   verified end to end. Belal's block replaces it; the THD number moves with it.
 - **`GridAngle_ideal` is a stub** for Aqib's SRF-PLL — dynamics-free by design.
-- **Folder placement.** The root README's layout has no home for the inverter
-  plant. This sits in `models/inverter/`; worth a team decision before merge.
+- **Folder placement — settled.** This lives in `models/inverter/`, and the root
+  README's layout now lists it. `models/control/` is Aqib's SRF-PLL and DC-link
+  loop.
 
 ## Things worth knowing before extending this
 
