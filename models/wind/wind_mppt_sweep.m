@@ -1,5 +1,5 @@
 % wind_mppt_sweep.m
-% Tunes and justifies the P&O MPPT settings in params/windParams.m.
+% Tunes and justifies the P&O MPPT settings in models/wind/windParams.m.
 %
 % Every run here forces wp.mppt_mode = 0. The default is now torque control
 % (mode 1), which does not use the duty seed or the perturbation settings, so
@@ -19,7 +19,7 @@
 % instead of the new steady state, and walks the wrong way.
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_mppt_sweep
 %
 % Owner: Ba Huy Ta

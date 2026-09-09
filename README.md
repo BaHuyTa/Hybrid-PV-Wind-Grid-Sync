@@ -76,7 +76,7 @@ are used for loop tuning.
 > which is present.
 
 ```matlab
-addpath(genpath('params'), genpath('scripts'), genpath('models'));
+addpath(genpath('models'));   % wind scripts, params and .slx all live in models/wind
 wp = windParams();      % load wind subsystem parameters
 wind_model_check        % sizing arithmetic only - no Simulink needed
 wind_model_lint         % library links resolved, no literal design parameters

@@ -24,7 +24,7 @@
 %     7 W at 3 kW, 2.7 kW at 60 kW. Now wp.Ron_dev, shared by every device.
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_fidelity_check
 %
 % Owner: Ba Huy Ta

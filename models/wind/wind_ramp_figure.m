@@ -7,7 +7,7 @@
 % Output: results/s3_ramp.png (results/ is gitignored - regenerate, don't commit)
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_ramp_figure
 %
 % Owner: Ba Huy Ta
@@ -51,7 +51,7 @@ legend({'achievable', 'P&O', 'torque control'}, 'Location', 'northwest');
 
 linkaxes([ax1 ax2 ax3], 'x'); xlim([0 300]);
 
-outDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'results');
+outDir = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'results');
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 out = fullfile(outDir, 's3_ramp.png');
 exportgraphics(f, out, 'Resolution', 130);

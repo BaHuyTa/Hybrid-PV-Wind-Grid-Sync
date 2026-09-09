@@ -12,7 +12,7 @@
 % eta_conv is that conversion factor, measured by wind_mppt_sweep.m.
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_scenarios
 %
 % Owner: Ba Huy Ta

@@ -40,7 +40,7 @@ different project, proposed at week 6 with weeks 8–11 already a serial depende
 
 **Cost of the change.** Low, by construction. Bus voltage and grid voltage are unchanged,
 so only currents scale. Every derived wind quantity falls out of one line in
-`params/windParams.m`. `TestHarness/pv/pvParams.m` needed **no change at all** — every
+`models/wind/windParams.m`. `TestHarness/pv/pvParams.m` needed **no change at all** — every
 limit in it is a percentage, a time, or the 700 V bus voltage, none of which scale.
 
 ---

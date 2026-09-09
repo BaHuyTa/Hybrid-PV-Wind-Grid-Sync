@@ -95,7 +95,7 @@ end
 end
 
 function r = windRoot()
-% Repo root, resolved from this file's own location - so the scripts work
+% Repo root (models/wind/<this file> -> up three), so the scripts work
 % regardless of the current folder.
-r = fileparts(fileparts(mfilename('fullpath')));
+r = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 end

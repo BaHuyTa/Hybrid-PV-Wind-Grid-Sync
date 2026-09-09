@@ -1,7 +1,7 @@
 % wind_model_check.m
 % Verifies the wind subsystem sizing in docs/wind-model-spec.md.
 %
-% Reads every constant from params/windParams.m so this script and the Simulink
+% Reads every constant from models/wind/windParams.m so this script and the Simulink
 % models can never disagree. Plain MATLAB - no toolbox needed, so anyone on the
 % team can run it.
 %
@@ -12,7 +12,7 @@
 %   4. Rotor mechanical settling time - the number the control pair needs
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'));
+%   addpath(genpath('models'));
 %   wind_model_check
 
 clear; clc;

@@ -5,7 +5,7 @@ function wp = windParams()
 % a value into a block mask — change it here so the two models can't drift apart.
 %
 % Owner: Ba Huy Ta (wind plant, W5-W6)
-% Verified by scripts/wind_model_check.m
+% Verified by models/wind/wind_model_check.m
 %
 %   wp = windParams();
 %
@@ -21,7 +21,7 @@ function wp = windParams()
 % duty, tip-speed ratio and time constant is unchanged; currents, powers and
 % inertia move with the rating, rotor radius with its square root, impedances
 % inversely. The validated operating points therefore carry over - see
-% scripts/wind_scenarios.m for the re-run at 60 kW.
+% models/wind/wind_scenarios.m for the re-run at 60 kW.
 
 %% ---- Design assumptions (the only free choices) -----------------------
 wp.P_elec   = 60000;    % W    rated electrical output (docs/decisions.md, 5 Sep 2026)
@@ -147,7 +147,7 @@ wp.d_init      = 1 - wp.V_rect_init/wp.V_dc;
 % (4.78 s - unchanged by the rescale, because H, lambda_opt and the Cp curve
 % are unchanged), or P&O reads the rotor's transient instead of the new steady
 % state and walks the wrong way. Tracking efficiency at 12 m/s, against what
-% the plant can actually deliver (open-loop duty sweep, scripts/wind_mppt_sweep.m,
+% the plant can actually deliver (open-loop duty sweep, models/wind/wind_mppt_sweep.m,
 % re-run at 60 kW on 6 Sep 2026):
 %
 %   Plant delivers 63726 W at duty 0.500 - 95.6% of the 66667 W in the wind;
@@ -177,7 +177,7 @@ wp.d_min   = 0.05;      % -    duty floor (stay in CCM, never fully off)
 % turbulent wind but only ~74% through a rising ramp: while the wind is
 % rising, power goes up after EVERY perturbation regardless of direction, so
 % P&O reads every step as a success and keeps walking the wrong way. Measured
-% by scripts/wind_scenarios.m, which runs both modes.
+% by models/wind/wind_scenarios.m, which runs both modes.
 %
 % P&O is retained, not deleted. Set mppt_mode = 0 to reproduce it.
 wp.mppt_mode = 1;

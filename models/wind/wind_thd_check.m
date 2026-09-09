@@ -19,7 +19,7 @@
 % Output: results/thd_spectra.png (gitignored - regenerate, don't commit)
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_thd_check
 %
 % Owner: Ba Huy Ta
@@ -92,7 +92,7 @@ for k = 1:numel(sig)
     hold on; xline(wp.f_sw, '--', sprintf('f_{sw} = %g kHz', wp.f_sw/1e3)); xline(6*f_e, ':', '6 f_e');
 end
 xlabel('frequency (Hz)');
-outDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'results');
+outDir = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'results');
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 exportgraphics(f, fullfile(outDir, 'thd_spectra.png'), 'Resolution', 130);
 

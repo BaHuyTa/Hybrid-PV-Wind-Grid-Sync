@@ -35,7 +35,7 @@ one PV uses too.
 
 Accepted limitation: the 6-pulse bridge draws non-sinusoidal stator current, so there is a
 6th-harmonic torque ripple on the shaft. It does not propagate past the boost and does not affect any
-graded metric. **Quantified** (`scripts/wind_thd_check.m`, switched model at rated, 6 Sep 2026):
+graded metric. **Quantified** (`models/wind/wind_thd_check.m`, switched model at rated, 6 Sep 2026):
 stator current THD **15.6%**, 5th 13.9%, 7th 6.5%, 11th 2.2%, no triplens. Lower than the
 ideal 31% because the ~0.19 pu stator reactance gives a long commutation overlap. The 6·f_e ripple
 reaching the DC bus is 1.26 A on 95 A, 1.3%. What the bus does see is the boost diode's
@@ -62,7 +62,7 @@ Cp coefficients (standard set): c1 = 0.5176, c2 = 116, c3 = 0.4, c4 = 5, c5 = 21
 **MPPT:** both are built and selectable via `wp.mppt_mode`. **The default is optimal torque
 control (mode 1), which is a change from the original plan** — P&O is retained as mode 0, not deleted.
 
-The evidence, from `scripts/wind_scenarios.m` (tracking efficiency, both modes, same scenarios,
+The evidence, from `models/wind/wind_scenarios.m` (tracking efficiency, both modes, same scenarios,
 60 kW plant, 6 Sep 2026):
 
 | Scenario | P&O | torque control |
@@ -81,15 +81,15 @@ direction on only ~half the perturbations. It fails on a *sustained ramp*: while
 the measured power goes up after **every** perturbation regardless of which way the perturbation
 went, so P&O reads every step as a success and keeps walking the wrong way. Over the ramp, λ drifts
 from ~8 down to ~5.2 while the duty *rises* — exactly when it should be falling to let the rotor
-speed up. `scripts/wind_ramp_figure.m` draws it.
+speed up. `models/wind/wind_ramp_figure.m` draws it.
 
 This is the same class of defect as the falling-irradiance ramp the PV harness found. Same
 algorithm, same blind spot, different plant.
 
 P&O also needs `Ts_mppt = 5 s`, not the 0.1–0.5 s of the original plan: the perturbation period
 has to be longer than the 4.78 s rotor settling time, or P&O measures the rotor's transient
-instead of the new steady state. The full tuning sweep is in `scripts/wind_mppt_sweep.m` and the
-table is recorded in `params/windParams.m`.
+instead of the new steady state. The full tuning sweep is in `models/wind/wind_mppt_sweep.m` and the
+table is recorded in `models/wind/windParams.m`.
 
 **This needs the team's ratification**, because the roadshow Q&A committed us publicly to sharing
 one MPPT algorithm with the PV branch. Mode 0 still does that and still works — it just costs
@@ -138,7 +138,7 @@ whether we should model two 30 kW units. It is a real product class — checked 
 | Aeolos-H 60 kW | 22.3 m | 9 m/s (cut-in 3 m/s) | direct-drive PMG, pitch-regulated | [windturbinestar.com](https://www.windturbinestar.com/60kw-wind-turbine.html) |
 | Danish Wind Turbines 60 kW | 16.3 m (208 m²) | — | — | [wind-turbine-models.com](https://en.wind-turbine-models.com/turbines/1394-danish-wind-turbines-60-kw) |
 | IMPEC 60 kW | — | — | PM synchronous | [wind-turbine-models.com](https://en.wind-turbine-models.com/turbines/1869-impec-60kw) |
-| **this spec** | **12.9 m** | **12 m/s** | PMSG, 400 V rectified, stall (fixed pitch) | `params/windParams.m` |
+| **this spec** | **12.9 m** | **12 m/s** | PMSG, 400 V rectified, stall (fixed pitch) | `models/wind/windParams.m` |
 
 So: **one 60 kW machine, not two 30 kW.** Two units would add a second rotor, a second rectifier
 and boost, and the question of how the two MPPTs share one bus — new modelling for no graded
@@ -233,7 +233,7 @@ Both variants read the same `windParams.m`:
   validation, and to confirm the averaged-model tuning survives switching (the "model fidelity"
   risk on page 5).
 
-**Both are built and cross-validated at 60 kW.** `scripts/wind_fidelity_check.m` pins the rotor at
+**Both are built and cross-validated at 60 kW.** `models/wind/wind_fidelity_check.m` pins the rotor at
 the rated operating point and compares them:
 
 | | switched | averaged | diff |
@@ -289,7 +289,7 @@ models/wind/
   windPlantAvg.slx   averaged  - variable-step, ~15 s per 150 s run
   windPlantSw.slx    switched  - Simscape Electrical, fixed-step at Ts_power,
                      ~100–150x real time (a 0.3 s run takes ~45 s)
-scripts/
+  windParams.m       every design number; the models bind their workspace to it
   windSim.m               run one scenario against either model
   wind_model_check.m      sizing arithmetic (no Simulink needed)
   wind_mppt_sweep.m       open-loop duty sweep + P&O tuning table
@@ -303,7 +303,7 @@ scripts/
 ```
 
 ```matlab
-addpath(genpath('params'), genpath('scripts'), genpath('models'));
+addpath(genpath('models'));
 wind_model_check        % sizing closes
 wind_model_lint         % structure: links, workspace, no literals
 wind_scenarios          % 10/10
@@ -314,7 +314,7 @@ wind_thd_check          % 6/6, FFT of the switched model
 Both models take their parameters from the model workspace, which is bound to
 `windParams()` directly — there is no dependency on whatever is in the base
 workspace, and no constant is stored in a block mask. **The 60 kW rescale touched no `.slx`
-file**: every changed number is in `params/windParams.m`, and the lint confirms the models
+file**: every changed number is in `models/wind/windParams.m`, and the lint confirms the models
 still reference it and nothing else.
 
 **Toolbox note.** This does *not* need Specialized Power Systems, and that is just as well:

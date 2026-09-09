@@ -19,7 +19,7 @@
 %      the model does not use, and those are deliberately not flagged.
 %
 % Usage:
-%   addpath(genpath('params'), genpath('scripts'), genpath('models'));
+%   addpath(genpath('models'));
 %   wind_model_lint
 %
 % Owner: Ba Huy Ta

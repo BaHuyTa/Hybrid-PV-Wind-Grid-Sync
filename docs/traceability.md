@@ -39,6 +39,6 @@ chapter will use; every subsystem owner fills their own rows.
 Regenerate everything in section B with:
 
 ```matlab
-addpath(genpath('params'), genpath('scripts'), genpath('models'));
+addpath(genpath('models'));
 wind_model_check; wind_model_lint; wind_scenarios; wind_fidelity_check; wind_mppt_sweep; wind_thd_check;
 ```
