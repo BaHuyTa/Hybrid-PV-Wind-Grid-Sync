@@ -25,6 +25,7 @@ html/
 # Simulation output (regenerate, don't commit — these get large fast)
 results/*.mat
 results/*.csv
+results/*.png
 *.fig
 
 # MATLAB session
@@ -40,3 +41,10 @@ desktop.ini
 # Scratch / not project artifacts
 Pasted image*.png
 scratch/
+
+# Personal — not part of the team deliverable
+individual/
+
+# Meeting recordings / transcripts - private, names inside
+docs/Meeting*
+*.docx

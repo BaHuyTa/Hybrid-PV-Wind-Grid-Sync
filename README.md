@@ -76,11 +76,24 @@ Requires MATLAB R2026a with Simulink, Simscape, and **Simscape Electrical
 (Specialized Power Systems)**. Control System Toolbox and Simulink Control Design
 are used for loop tuning.
 
+> **Check before you build on Specialized Power Systems:** `powerlib` is not on the
+> lab image. The wind models need only foundation Simscape Electrical (`ee_lib`),
+> which is present.
+
 ```matlab
-addpath(genpath('params'), genpath('scripts'));
+addpath(genpath('params'), genpath('scripts'), genpath('models'));
 wp = windParams();      % load wind subsystem parameters
-wind_model_check        % verify the sizing closes
+wind_model_check        % sizing arithmetic only - no Simulink needed
+wind_model_lint         % library links resolved, no literal design parameters
+wind_scenarios          % 6 scenarios, 10 checks, both MPPT modes
+wind_fidelity_check     % averaged vs switched cross-validation
+wind_thd_check          % FFT / THD of the switched model (stator, DC bus, inductor)
 ```
+
+The wind branch is built and tested standalone at 60 kW: two fidelities, cross-validated
+to under 1%, with a 6-scenario / 10-check harness. See
+[docs/wind-model-spec.md](docs/wind-model-spec.md) §6a and
+[docs/traceability.md](docs/traceability.md).
 
 ## Working on models
 
@@ -134,6 +147,13 @@ Not yet confirmed with the team — flagged so nobody builds on them unknowingly
   nearer 18–21 m. Alternative: match a real 60 kW turbine datasheet.
 - Wind uses a passive diode bridge + boost rather than an active rectifier. See
   [docs/wind-model-spec.md](docs/wind-model-spec.md) for the reasoning.
+- The 60 kW PMSG has **20 pole pairs** so the electrical frequency stays near 48 Hz
+  at the slower 144 rpm rated speed. Only the flux linkage depends on it.
+- **The wind MPPT default is optimal torque control, not P&O.** P&O tracks 96-99% in
+  steady and turbulent wind but only ~74% through a sustained ramp, because rising wind
+  makes every perturbation look successful. Both are built and selectable
+  (`wp.mppt_mode`). This affects the claim that both plants share one MPPT algorithm,
+  so it needs a team decision — see [docs/wind-model-spec.md](docs/wind-model-spec.md) §2.
 - The site load is a constant 250 kW PQ load. A real duty cycle would be more
   convincing but nothing in the success criteria measures it.
 - SCR = 3 is reached by adding series grid impedance, not by a real weak connection —
