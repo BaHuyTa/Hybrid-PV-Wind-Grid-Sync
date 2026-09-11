@@ -147,6 +147,11 @@ wire(cl, 'i_dq_vector/1', 'i_dq/1');
 % delays, which all run at ip.Ts_ctrl, so the command still updates once per
 % control period - the rate is set by the blocks that matter, not by a
 % subsystem-level declaration.
+area(cl, 'Park transform   abc -> dq, d aligned with the grid voltage vector', [130 35 365 255], '[0.90 0.90 1.00]');
+area(cl, 'd axis   active current   Vd = PI(Id_ref - Id) + Vgd - wL*Iq', [395 265 845 455], '[0.90 1.00 0.90]');
+area(cl, 'q axis   reactive current   Vq = PI(Iq_ref - Iq) + Vgq + wL*Id', [395 485 845 675], '[0.90 1.00 0.90]');
+area(cl, 'Measured current out (one control step old, like Vd/Vq)', [640 35 875 115], '[0.94 0.94 0.94]');
+
 set_param(cl, 'TreatAsAtomicUnit', 'off');
 
 %% ======================================================================= Bridge
@@ -214,15 +219,15 @@ for k = 1:3
         tag = legTag{r,k};
         addb(br, 'simulink/Signal Routing/From', ['From_' tag], [x0 yb x0+50 yb+25]);
         set_param([br '/From_' tag], 'GotoTag', tag);
-        addb(br, 'nesl_utility/Simulink-PS Converter', ['S2PS_' tag], [x0 yb+45 x0+50 yb+85]);
+        addb(br, 'nesl_utility/Simulink-PS Converter', ['gate_' tag], [x0 yb+45 x0+50 yb+85]);
         addb(br, 'ee_lib/Semiconductors & Converters/IGBT (Ideal, Switching)', tag, ...
              [x0+80 yb+35 x0+150 yb+105]);
         set_param([br '/' tag], ...
             'diode_param','ee.enum.semiconductors.protectionDiode.nodynamics', ...
             'Vth','ip.Vth_gate', 'Vf','ip.Vf_dev', 'Ron','ip.Ron_dev', 'Goff','ip.Goff_dev', ...
             'diode_Vf','ip.Vf_dev', 'diode_Ron','ip.Ron_dev', 'diode_Goff','ip.Goff_dev');
-        wire(br, ['From_' tag '/1'],  ['S2PS_' tag '/1']);
-        wire(br, ['S2PS_' tag '/R1'], [tag '/L1']);              % gate
+        wire(br, ['From_' tag '/1'],  ['gate_' tag '/1']);
+        wire(br, ['gate_' tag '/R1'], [tag '/L1']);              % gate
     end
     up = legTag{1,k};  lo = legTag{2,k};
     wire(br, 'DCp/L1',    [up '/R1']);                           % DC+ -> upper C
@@ -234,14 +239,25 @@ for k = 1:3
     % stays next to what it measures instead of crossing the diagram
     addb(br, 'ee_lib/Sensors & Transducers/Voltage Sensor', ['Vp_' phn{k}], ...
          [x0+80 560 x0+130 600]);
-    addb(br, 'nesl_utility/PS-Simulink Converter', ['PS_vp' phn{k}], ...
+    addb(br, 'nesl_utility/PS-Simulink Converter', ['v_pole_' phn{k}], ...
          [x0+80 630 x0+130 670]);
     wire(br, ['Vp_' phn{k} '/L1'], [up '/R2']);
     wire(br, ['Vp_' phn{k} '/R2'], 'DCn/L1');
-    wire(br, ['Vp_' phn{k} '/R1'], ['PS_vp' phn{k} '/L1']);
-    wire(br, ['PS_vp' phn{k} '/1'], ['Mux_vpole/' num2str(k)]);
+    wire(br, ['Vp_' phn{k} '/R1'], ['v_pole_' phn{k} '/L1']);
+    wire(br, ['v_pole_' phn{k} '/1'], ['Mux_vpole/' num2str(k)]);
 end
 wire(br, 'Mux_vpole/1', 'v_pole/1');
+
+% grouping boxes - what turns six switches and their plumbing into a diagram
+area(br, 'Gate driver  -  gates(1..6) fanned out to the S1..S6 tags', ...
+     [30 505 275 900], '[0.90 0.90 1.00]');
+for k = 1:3
+    x0 = 300 + 260*(k-1);
+    area(br, sprintf('Leg %s   -  %s upper / %s lower', upper(phn{k}), ...
+         legTag{1,k}, legTag{2,k}), [x0-25 75 x0+175 480], '[0.90 1.00 0.90]');
+end
+area(br, 'Pole voltage measurement  -  each leg referred to the DC NEGATIVE rail', ...
+     [290 540 1200 690], '[0.94 0.94 0.94]');
 
 %% ===================================================================== LCLFilter
 % L1 - Cf/Rd - L2, wye capacitor bank with a FLOATING star point (three-wire:
@@ -292,8 +308,8 @@ for k = 1:3
     y = 40 + 100*(k-1);
     addb(lf, 'ee_lib/Sensors & Transducers/Current Sensor', ['I1_' phn{k}], [140 y 190 y+40]);
     addb(lf, 'ee_lib/Sensors & Transducers/Current Sensor', ['I2_' phn{k}], [940 y 990 y+40]);
-    addb(lf, 'nesl_utility/PS-Simulink Converter', ['PS_i1' phn{k}], [860 700+70*(k-1) 910 740+70*(k-1)]);
-    addb(lf, 'nesl_utility/PS-Simulink Converter', ['PS_i2' phn{k}], [860 880+70*(k-1) 910 920+70*(k-1)]);
+    addb(lf, 'nesl_utility/PS-Simulink Converter', ['i1_' phn{k}], [860 700+70*(k-1) 910 740+70*(k-1)]);
+    addb(lf, 'nesl_utility/PS-Simulink Converter', ['i2_' phn{k}], [860 880+70*(k-1) 910 920+70*(k-1)]);
 
     wire(lf, [phn{k} '_inv/L1'],   ['I1_' phn{k} '/L1']);
     wire(lf, ['I1_' phn{k} '/R2'], ['L1_branch/L' num2str(k)]);
@@ -302,15 +318,20 @@ for k = 1:3
     wire(lf, ['L2_branch/R' num2str(k)], ['I2_' phn{k} '/L1']);
     wire(lf, ['I2_' phn{k} '/R2'], [phn{k} '_grid/L1']);
 
-    wire(lf, ['I1_' phn{k} '/R1'], ['PS_i1' phn{k} '/L1']);
-    wire(lf, ['PS_i1' phn{k} '/1'], ['Mux_i1/' num2str(k)]);
-    wire(lf, ['I2_' phn{k} '/R1'], ['PS_i2' phn{k} '/L1']);
-    wire(lf, ['PS_i2' phn{k} '/1'], ['Mux_i2/' num2str(k)]);
+    wire(lf, ['I1_' phn{k} '/R1'], ['i1_' phn{k} '/L1']);
+    wire(lf, ['i1_' phn{k} '/1'], ['Mux_i1/' num2str(k)]);
+    wire(lf, ['I2_' phn{k} '/R1'], ['i2_' phn{k} '/L1']);
+    wire(lf, ['i2_' phn{k} '/1'], ['Mux_i2/' num2str(k)]);
 end
 wire(lf, 'Cf_branch/R1', 'Cf_branch/R2');      % floating capacitor star point
 wire(lf, 'Cf_branch/R2', 'Cf_branch/R3');
 wire(lf, 'Mux_i1/1', 'i1_abc/1');
 wire(lf, 'Mux_i2/1', 'i2_abc/1');
+
+area(lf, 'L1   inverter side   sized for the ripple current', [275 15 405 325], '[0.90 1.00 0.90]');
+area(lf, 'Cf + Rd   damped shunt, FLOATING star point', [530 395 665 685], '[0.90 0.90 1.00]');
+area(lf, 'L2   grid side   what the capacitor works against', [735 15 865 325], '[0.90 1.00 0.90]');
+area(lf, 'Current measurement   i1 is controlled, i2 is what the grid sees (THD)', [110 690 1130 1045], '[0.94 0.94 0.94]');
 
 %% ============================================================== Modulator_SVPWM
 % STUB - Belal owns the real modulator. This exists so the LCL can be verified
@@ -442,6 +463,23 @@ function port(parent, name, num, side, pos)
 %PORT  Physical (Simscape) connection port on a subsystem boundary.
 add_block('built-in/PMIOPort', [parent '/' name]);
 set_param([parent '/' name], 'Port', num2str(num), 'Side', side, 'Position', pos);
+end
+
+function area(parent, label, pos, colour)
+%AREA  Labelled grouping box. Purely cosmetic, but it is what turns a wall of
+%      blocks into something a teammate can read at a glance.
+persistent n
+if isempty(n), n = 0; end
+n = n + 1;
+nm = sprintf('%s/__area%d', parent, n);
+add_block('built-in/Area', nm, 'Position', pos);
+as = find_system(bdroot(parent), 'FindAll','on', 'Type','annotation');
+for k = 1:numel(as)
+    if strcmp(get_param(as(k),'Name'), sprintf('__area%d', n))
+        set_param(as(k), 'Name', label, 'BackgroundColor', colour);
+        break
+    end
+end
 end
 
 function wire(parent, from, to, name)

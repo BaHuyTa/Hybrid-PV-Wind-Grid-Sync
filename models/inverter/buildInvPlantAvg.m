@@ -191,6 +191,10 @@ set_param(mdl, 'SolverType','Fixed-step', 'Solver','FixedStepDiscrete', ...
     'SaveOutput','on', 'SaveFormat','Dataset', ...
     'SignalLogging','on', 'SignalLoggingName','logsout');
 
+area(mdl, 'Control   current loop (real) + modulator and grid angle (STUBS)', [180 55 565 400], '[0.90 0.90 1.00]');
+area(mdl, 'Plant   averaged bridge -> LCL filter -> grid', [595 55 790 245], '[0.90 1.00 0.90]');
+area(mdl, 'Telemetry', [880 55 1060 640], '[0.94 0.94 0.94]');
+
 note(mdl, [60 660], { ...
     'AVERAGED model - for tuning the current loop, not for THD. No switching.'
     'Modulator_ideal and GridAngle_ideal are stubs for Belal''s SVPWM and'
@@ -263,6 +267,23 @@ if any(tok(1) == 'LR')
 else
     idx = str2double(tok);
     if strcmp(dir, 'out'), h = ph.Outport(idx); else, h = ph.Inport(idx); end
+end
+end
+
+function area(parent, label, pos, colour)
+%AREA  Labelled grouping box. Cosmetic, but it is what turns a wall of blocks
+%      into something a teammate can read at a glance.
+persistent n
+if isempty(n), n = 0; end
+n = n + 1;
+nm = sprintf('%s/__area%d', parent, n);
+add_block('built-in/Area', nm, 'Position', pos);
+as = find_system(bdroot(parent), 'FindAll','on', 'Type','annotation');
+for k = 1:numel(as)
+    if strcmp(get_param(as(k),'Name'), sprintf('__area%d', n))
+        set_param(as(k), 'Name', label, 'BackgroundColor', colour);
+        break
+    end
 end
 end
 

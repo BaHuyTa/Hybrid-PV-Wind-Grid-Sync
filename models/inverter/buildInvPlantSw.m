@@ -180,6 +180,10 @@ set_param(mdl, 'SolverType','Fixed-step', 'Solver','FixedStepDiscrete', ...
     'SaveOutput','on', 'SaveFormat','Dataset', ...
     'SignalLogging','on', 'SignalLoggingName','logsout');
 
+area(mdl, 'Power path   DC bus -> bridge -> LCL filter -> grid', [150 25 1050 265], '[0.90 1.00 0.90]');
+area(mdl, 'Control path   grid angle -> current loop -> modulator   (PLL and SVPWM are stubs)', [130 380 875 745], '[0.90 0.90 1.00]');
+area(mdl, 'Telemetry', [1100 30 1285 730], '[0.94 0.94 0.94]');
+
 note(mdl, [60 780], { ...
     'SWITCHED deliverable inverter: dq current loop -> SVPWM -> bridge -> LCL -> grid.'
     'THD is measured on i2_abc, the GRID-side current, in inv_grid_thd_check.'
@@ -243,6 +247,23 @@ if any(tok(1) == 'LR')
 else
     idx = str2double(tok);
     if strcmp(dir, 'out'), h = ph.Outport(idx); else, h = ph.Inport(idx); end
+end
+end
+
+function area(parent, label, pos, colour)
+%AREA  Labelled grouping box. Cosmetic, but it is what turns a wall of blocks
+%      into something a teammate can read at a glance.
+persistent n
+if isempty(n), n = 0; end
+n = n + 1;
+nm = sprintf('%s/__area%d', parent, n);
+add_block('built-in/Area', nm, 'Position', pos);
+as = find_system(bdroot(parent), 'FindAll','on', 'Type','annotation');
+for k = 1:numel(as)
+    if strcmp(get_param(as(k),'Name'), sprintf('__area%d', n))
+        set_param(as(k), 'Name', label, 'BackgroundColor', colour);
+        break
+    end
 end
 end
 
