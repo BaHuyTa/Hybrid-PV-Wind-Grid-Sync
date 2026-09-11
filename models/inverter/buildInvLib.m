@@ -149,6 +149,100 @@ wire(cl, 'i_dq_vector/1', 'i_dq/1');
 % subsystem-level declaration.
 set_param(cl, 'TreatAsAtomicUnit', 'off');
 
+%% ======================================================================= Bridge
+% Six discrete IGBTs with antiparallel diodes, drawn as three legs with S1..S6
+% gate tags - the textbook layout, so it reads the way the team expects rather
+% than hiding in one block. Electrically identical to Converter (Three-Phase);
+% inv_thd_check and inv_grid_thd_check are what prove that.
+%
+%   in   gates  (6)  [a+ a- b+ b- c+ c-]  - the Six-Pulse Gate Multiplexer order
+%   out  v_pole (3)  each leg output referred to the DC NEGATIVE RAIL, not to
+%                    ground: the DC bus floats in the grid-connected model
+%   in/out  DCp DCn (left)   a b c (right)
+%
+% GATE NUMBERING. The S1..S6 tags use the classic firing-sequence convention
+% from the textbooks - S1/S3/S5 are the upper devices of a/b/c, S4/S6/S2 the
+% lower ones. That is NOT the order the modulator emits, which is by leg:
+%
+%       tag   device      gates(...)
+%       S1    a upper         1
+%       S4    a lower         2
+%       S3    b upper         3
+%       S6    b lower         4
+%       S5    c upper         5
+%       S2    c lower         6
+%
+% The uppers coincide (S1/S3/S5 <- 1/3/5) and the lowers do not. That is what
+% makes this mapping dangerous to transcribe: a mistake looks right on the top
+% row and silently swaps the lower devices between phases, which is
+% shoot-through. Verified by firing one gate at a time into a split DC bus.
+br = [lib '/Bridge'];
+add_block('built-in/Subsystem', br, 'Position', [200 660 340 780]);
+clearSubsystem(br);
+
+port(br, 'DCp', 1, 'Left',  [40  60  50  80]);
+port(br, 'DCn', 2, 'Left',  [40 600  50 620]);
+port(br, 'a',   3, 'Right', [1180 250 1190 270]);
+port(br, 'b',   4, 'Right', [1180 300 1190 320]);
+port(br, 'c',   5, 'Right', [1180 350 1190 370]);
+
+addb(br, 'simulink/Sources/In1',          'gates', [40 700 70 714]);
+addb(br, 'simulink/Signal Routing/Demux', 'Demux', [120 540 125 860]);
+set_param([br '/Demux'], 'Outputs', '6');
+wire(br, 'gates/1', 'Demux/1');
+
+% gates(k) -> the tag that drives it
+tagOf  = {'S1','S4','S3','S6','S5','S2'};        % by gates index
+for k = 1:6
+    y = 540 + 55*(k-1);
+    addb(br, 'simulink/Signal Routing/Goto', ['Goto_' tagOf{k}], [170 y 230 y+25]);
+    set_param([br '/Goto_' tagOf{k}], 'GotoTag', tagOf{k}, 'TagVisibility', 'local');
+    wire(br, sprintf('Demux/%d',k), ['Goto_' tagOf{k} '/1']);
+end
+
+% three legs: upper row S1 S3 S5, lower row S4 S6 S2
+legTag = {'S1','S3','S5'; 'S4','S6','S2'};       % row 1 upper, row 2 lower
+phn    = {'a','b','c'};
+addb(br, 'simulink/Signal Routing/Mux', 'Mux_vpole', [1080 600 1085 700]);
+set_param([br '/Mux_vpole'], 'Inputs', '3');
+addb(br, 'simulink/Sinks/Out1', 'v_pole', [1150 643 1180 657]);
+
+for k = 1:3
+    x0 = 300 + 260*(k-1);
+    for r = 1:2
+        yb  = 100 + 260*(r-1);
+        tag = legTag{r,k};
+        addb(br, 'simulink/Signal Routing/From', ['From_' tag], [x0 yb x0+50 yb+25]);
+        set_param([br '/From_' tag], 'GotoTag', tag);
+        addb(br, 'nesl_utility/Simulink-PS Converter', ['S2PS_' tag], [x0 yb+45 x0+50 yb+85]);
+        addb(br, 'ee_lib/Semiconductors & Converters/IGBT (Ideal, Switching)', tag, ...
+             [x0+80 yb+35 x0+150 yb+105]);
+        set_param([br '/' tag], ...
+            'diode_param','ee.enum.semiconductors.protectionDiode.nodynamics', ...
+            'Vth','ip.Vth_gate', 'Vf','ip.Vf_dev', 'Ron','ip.Ron_dev', 'Goff','ip.Goff_dev', ...
+            'diode_Vf','ip.Vf_dev', 'diode_Ron','ip.Ron_dev', 'diode_Goff','ip.Goff_dev');
+        wire(br, ['From_' tag '/1'],  ['S2PS_' tag '/1']);
+        wire(br, ['S2PS_' tag '/R1'], [tag '/L1']);              % gate
+    end
+    up = legTag{1,k};  lo = legTag{2,k};
+    wire(br, 'DCp/L1',    [up '/R1']);                           % DC+ -> upper C
+    wire(br, [up '/R2'],  [lo '/R1']);                           % upper E -> lower C = pole
+    wire(br, [lo '/R2'],  'DCn/L1');                             % lower E -> DC-
+    wire(br, [up '/R2'],  [phn{k} '/L1']);                       % pole -> phase port
+
+    % pole voltage sensed directly under its own leg, so the measurement chain
+    % stays next to what it measures instead of crossing the diagram
+    addb(br, 'ee_lib/Sensors & Transducers/Voltage Sensor', ['Vp_' phn{k}], ...
+         [x0+80 560 x0+130 600]);
+    addb(br, 'nesl_utility/PS-Simulink Converter', ['PS_vp' phn{k}], ...
+         [x0+80 630 x0+130 670]);
+    wire(br, ['Vp_' phn{k} '/L1'], [up '/R2']);
+    wire(br, ['Vp_' phn{k} '/R2'], 'DCn/L1');
+    wire(br, ['Vp_' phn{k} '/R1'], ['PS_vp' phn{k} '/L1']);
+    wire(br, ['PS_vp' phn{k} '/1'], ['Mux_vpole/' num2str(k)]);
+end
+wire(br, 'Mux_vpole/1', 'v_pole/1');
+
 %% ===================================================================== LCLFilter
 % L1 - Cf/Rd - L2, wye capacitor bank with a FLOATING star point (three-wire:
 % there is no zero-sequence path to give it, and grounding it would create one).

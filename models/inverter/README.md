@@ -21,7 +21,7 @@ Owner: Duc Pham
 | `buildInvPlantAvg.m` / `buildInvPlantSw.m` / `buildInvBridge120.m` | model builders |
 | `invSim.m` | runs any of the three, returns the telemetry bus |
 | `inv_model_check.m` | sizing, loop and filter arithmetic — no Simulink, no toolbox |
-| `inv_model_lint.m` | 24 structural checks across the three models |
+| `inv_model_lint.m` | 26 structural checks across the three models |
 | `inv_current_loop_check.m` | step response vs the graded spec |
 | `inv_grid_thd_check.m` | **the THD criterion** |
 | `inv_thd_check.m` | six-step spectrum vs closed form (`invBridge120`) |
@@ -29,14 +29,44 @@ Owner: Duc Pham
 ```matlab
 addpath(genpath('models'));
 inv_model_check          % arithmetic only
-inv_model_lint           % 24/24 structural checks
+inv_model_lint           % 26/26 structural checks
 inv_current_loop_check   % settling / overshoot / cross-coupling
 inv_grid_thd_check       % grid current THD at rated output
 ```
 
-`invLib` holds `CurrentLoop`, `Modulator_SVPWM` and `LCLFilter`. Both fidelities
+`invLib` holds `Bridge`, `CurrentLoop`, `Modulator_SVPWM` and `LCLFilter`. Both fidelities
 link the same blocks, so they cannot drift apart — the lint checks the links are
 resolved.
+
+## The bridge
+
+Built as **six discrete IGBTs with antiparallel diodes**, laid out as three legs
+with `S1`…`S6` gate tags — the textbook drawing, so it reads the way the team
+expects instead of hiding inside one block. It replaced a single
+`Converter (Three-Phase)` block; the swap is *proven* equivalent, not assumed —
+`inv_thd_check` still matches the closed form to −0.25 % and
+`inv_grid_thd_check` still gives 1.42 %.
+
+**Gate numbering is the one thing to be careful with.** The `S1`…`S6` tags use
+the classic firing-sequence convention. The modulator emits by leg. They are not
+the same order:
+
+| tag | device | `gates(...)` |
+|---|---|---|
+| S1 | a upper | 1 |
+| S4 | a lower | 2 |
+| S3 | b upper | 3 |
+| S6 | b lower | 4 |
+| S5 | c upper | 5 |
+| S2 | c lower | 6 |
+
+The uppers coincide (S1/S3/S5 ← 1/3/5) and the lowers do not. A careless
+transcription therefore looks correct on the top row and silently swaps the
+lower devices between phases — which is shoot-through. The mapping was verified
+by firing one gate at a time into a split DC bus and reading which leg moved.
+
+`v_pole` is referred to the **DC negative rail**, not to ground: the DC bus
+floats in the grid-connected model.
 
 ## The LCL filter
 

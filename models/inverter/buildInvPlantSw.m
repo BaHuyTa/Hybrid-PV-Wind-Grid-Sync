@@ -61,41 +61,11 @@ wire(s, 'I_dc/R1','PS2S/L1');   wire(s, 'PS2S/1','i_dc/1');
 % bus floats; that is why the topology works at all.
 
 %% ===================================================================== Bridge
-s = subsys(mdl, 'Bridge', [420 60 540 240]);
-addb(s, 'simulink/Sources/In1',          'gates', [30 480 60 494]);
-addb(s, 'simulink/Signal Routing/Demux', 'Demux', [110 340 115 640]);
-set_param([s '/Demux'], 'Outputs','6');
-addb(s, 'ee_lib/Semiconductors & Converters/Converters/Six-Pulse Gate Multiplexer', ...
-        'GateMux', [280 335 350 645]);
-for k = 1:6
-    y = 340 + 50*(k-1);
-    addb(s, 'nesl_utility/Simulink-PS Converter', sprintf('S2PS_%d',k), [180 y-5 230 y+35]);
-    wire(s, sprintf('Demux/%d',k),   sprintf('S2PS_%d/1',k));
-    wire(s, sprintf('S2PS_%d/R1',k), sprintf('GateMux/L%d',k));
-end
-wire(s, 'gates/1','Demux/1');
-
-addb(s, 'ee_lib/Semiconductors & Converters/Converters/Converter (Three-Phase)', ...
-        'Converter', [450 60 570 280]);
-set_param([s '/Converter'], ...
-    'port_option','ee.enum.threePhasePort.expanded', ...
-    'device_type','ee.enum.converters.switchingdevice.igbt', ...
-    'diode_param','ee.enum.converters.protectiondiode.nodynamics', ...
-    'Vth','ip.Vth_gate', 'Vf','ip.Vf_dev', 'Ron','ip.Ron_dev', 'Goff','ip.Goff_dev', ...
-    'diode_Vf','ip.Vf_dev', 'diode_Ron','ip.Ron_dev', 'BlockMirror','on');
-wire(s, 'GateMux/R1','Converter/L1');
-
-port(s, 'DCp', 1, 'Left',  [40 100 50 120]);
-port(s, 'DCn', 2, 'Left',  [40 200 50 220]);
-port(s, 'a',   3, 'Right', [950 100 960 120]);
-port(s, 'b',   4, 'Right', [950 170 960 190]);
-port(s, 'c',   5, 'Right', [950 240 960 260]);
-wire(s, 'DCp/L1','Converter/R1');
-wire(s, 'DCn/L1','Converter/R2');
-phn = {'a','b','c'};
-for k = 1:3
-    wire(s, ['Converter/L' num2str(k+1)], [phn{k} '/L1']);
-end
+% Linked from invLib: six discrete IGBTs with S1..S6 gate tags, the textbook
+% layout. v_pole is not used here - the pole waveform is what invBridge120 is
+% for - so it is terminated rather than left dangling.
+add_block([lib '/Bridge'], [mdl '/Bridge'], 'Position', [420 60 540 240]);
+addb(mdl, 'simulink/Sinks/Terminator', 'Term_vpole', [580 140 600 160]);
 
 %% =================================================================== GridSide
 % Stiff grid at the PCC. Its impedance option is set EXPLICITLY - the block
@@ -189,6 +159,7 @@ wire(mdl, 'CurrentLoop/1','Modulator_SVPWM/1', 'Vd');
 wire(mdl, 'CurrentLoop/2','Modulator_SVPWM/2', 'Vq');
 wire(mdl, 'GridAngle_ideal/1', 'Modulator_SVPWM/3');
 wire(mdl, 'Modulator_SVPWM/1', 'Bridge/1', 'gates');
+wire(mdl, 'Bridge/1', 'Term_vpole/1');
 
 wire(mdl, 'Id_ref/1','Mux_iref/1');   wire(mdl, 'Iq_ref/1','Mux_iref/2');
 wire(mdl, 'CurrentLoop/1','Mux_vdq/1'); wire(mdl, 'CurrentLoop/2','Mux_vdq/2');
