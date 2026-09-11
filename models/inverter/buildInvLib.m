@@ -185,22 +185,22 @@ br = [lib '/Bridge'];
 add_block('built-in/Subsystem', br, 'Position', [200 660 340 780]);
 clearSubsystem(br);
 
-port(br, 'DCp', 1, 'Left',  [40  60  50  80]);
-port(br, 'DCn', 2, 'Left',  [40 600  50 620]);
+port(br, 'DCp', 1, 'Left',  [40  25  50  45]);
+port(br, 'DCn', 2, 'Left',  [40 690  50 710]);
 port(br, 'a',   3, 'Right', [1180 250 1190 270]);
 port(br, 'b',   4, 'Right', [1180 300 1190 320]);
 port(br, 'c',   5, 'Right', [1180 350 1190 370]);
 
-addb(br, 'simulink/Sources/In1',          'gates', [40 700 70 714]);
-addb(br, 'simulink/Signal Routing/Demux', 'Demux', [120 540 125 860]);
+addb(br, 'simulink/Sources/In1',          'gates', [40 330 70 344]);
+addb(br, 'simulink/Signal Routing/Demux', 'Demux', [110 120 115 600]);
 set_param([br '/Demux'], 'Outputs', '6');
 wire(br, 'gates/1', 'Demux/1');
 
 % gates(k) -> the tag that drives it
 tagOf  = {'S1','S4','S3','S6','S5','S2'};        % by gates index
 for k = 1:6
-    y = 540 + 55*(k-1);
-    addb(br, 'simulink/Signal Routing/Goto', ['Goto_' tagOf{k}], [170 y 230 y+25]);
+    y = 120 + 90*(k-1);
+    addb(br, 'simulink/Signal Routing/Goto', ['Goto_' tagOf{k}], [150 y 210 y+25]);
     set_param([br '/Goto_' tagOf{k}], 'GotoTag', tagOf{k}, 'TagVisibility', 'local');
     wire(br, sprintf('Demux/%d',k), ['Goto_' tagOf{k} '/1']);
 end
@@ -208,9 +208,9 @@ end
 % three legs: upper row S1 S3 S5, lower row S4 S6 S2
 legTag = {'S1','S3','S5'; 'S4','S6','S2'};       % row 1 upper, row 2 lower
 phn    = {'a','b','c'};
-addb(br, 'simulink/Signal Routing/Mux', 'Mux_vpole', [1080 600 1085 700]);
+addb(br, 'simulink/Signal Routing/Mux', 'Mux_vpole', [1080 545 1085 665]);
 set_param([br '/Mux_vpole'], 'Inputs', '3');
-addb(br, 'simulink/Sinks/Out1', 'v_pole', [1150 643 1180 657]);
+addb(br, 'simulink/Sinks/Out1', 'v_pole', [1150 598 1180 612]);
 
 for k = 1:3
     x0 = 300 + 260*(k-1);
@@ -238,9 +238,9 @@ for k = 1:3
     % pole voltage sensed directly under its own leg, so the measurement chain
     % stays next to what it measures instead of crossing the diagram
     addb(br, 'ee_lib/Sensors & Transducers/Voltage Sensor', ['Vp_' phn{k}], ...
-         [x0+80 560 x0+130 600]);
+         [x0+155 545 x0+205 585]);
     addb(br, 'nesl_utility/PS-Simulink Converter', ['v_pole_' phn{k}], ...
-         [x0+80 630 x0+130 670]);
+         [x0+155 615 x0+205 655]);
     wire(br, ['Vp_' phn{k} '/L1'], [up '/R2']);
     wire(br, ['Vp_' phn{k} '/R2'], 'DCn/L1');
     wire(br, ['Vp_' phn{k} '/R1'], ['v_pole_' phn{k} '/L1']);
@@ -250,14 +250,14 @@ wire(br, 'Mux_vpole/1', 'v_pole/1');
 
 % grouping boxes - what turns six switches and their plumbing into a diagram
 area(br, 'Gate driver  -  gates(1..6) fanned out to the S1..S6 tags', ...
-     [30 505 275 900], '[0.90 0.90 1.00]');
+     [28 95 228 645], '[0.90 0.90 1.00]');
 for k = 1:3
     x0 = 300 + 260*(k-1);
     area(br, sprintf('Leg %s   -  %s upper / %s lower', upper(phn{k}), ...
          legTag{1,k}, legTag{2,k}), [x0-25 75 x0+175 480], '[0.90 1.00 0.90]');
 end
 area(br, 'Pole voltage measurement  -  each leg referred to the DC NEGATIVE rail', ...
-     [290 540 1200 690], '[0.94 0.94 0.94]');
+     [420 500 1235 690], '[0.94 0.94 0.94]');
 
 %% ===================================================================== LCLFilter
 % L1 - Cf/Rd - L2, wye capacitor bank with a FLOATING star point (three-wire:
@@ -485,7 +485,7 @@ end
 function wire(parent, from, to, name)
 %WIRE  "Block/port" to "Block/port". A port written "L3"/"R2" is a physical
 %      connection port; a bare number is a signal port.
-h = add_line(parent, portOf(parent, from, 'out'), portOf(parent, to, 'in'), 'autorouting','on');
+h = add_line(parent, portOf(parent, from, 'out'), portOf(parent, to, 'in'), 'autorouting','smart');
 if nargin > 3, set_param(h, 'Name', name); end
 end
 

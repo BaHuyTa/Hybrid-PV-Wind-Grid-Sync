@@ -261,7 +261,7 @@ function wire(parent, from, to, name)
 %      physical connection port (LConn 3 / RConn 2); a bare number is a signal
 %      port. An optional fourth argument names the signal.
 h = add_line(parent, resolvePort(parent, from, 'out'), ...
-                     resolvePort(parent, to,   'in'), 'autorouting','on');
+                     resolvePort(parent, to,   'in'), 'autorouting','smart');
 if nargin > 3, set_param(h, 'Name', name); end
 end
 

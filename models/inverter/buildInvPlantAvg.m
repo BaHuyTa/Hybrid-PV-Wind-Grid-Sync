@@ -249,7 +249,7 @@ end
 
 function wire(parent, from, to, name)
 h = add_line(parent, resolvePort(parent, from, 'out'), ...
-                     resolvePort(parent, to,   'in'), 'autorouting','on');
+                     resolvePort(parent, to,   'in'), 'autorouting','smart');
 if nargin > 3, set_param(h, 'Name', name); end
 end
 
