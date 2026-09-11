@@ -147,7 +147,117 @@ wire(cl, 'i_dq_vector/1', 'i_dq/1');
 % delays, which all run at ip.Ts_ctrl, so the command still updates once per
 % control period - the rate is set by the blocks that matter, not by a
 % subsystem-level declaration.
+area(cl, 'Park transform   abc -> dq, d aligned with the grid voltage vector', [130 35 365 255], '[0.90 0.90 1.00]');
+area(cl, 'd axis   active current   Vd = PI(Id_ref - Id) + Vgd - wL*Iq', [395 265 845 455], '[0.90 1.00 0.90]');
+area(cl, 'q axis   reactive current   Vq = PI(Iq_ref - Iq) + Vgq + wL*Id', [395 485 845 675], '[0.90 1.00 0.90]');
+area(cl, 'Measured current out (one control step old, like Vd/Vq)', [640 35 875 115], '[0.94 0.94 0.94]');
+
 set_param(cl, 'TreatAsAtomicUnit', 'off');
+
+%% ======================================================================= Bridge
+% Six discrete IGBTs with antiparallel diodes, drawn as three legs with S1..S6
+% gate tags - the textbook layout, so it reads the way the team expects rather
+% than hiding in one block. Electrically identical to Converter (Three-Phase);
+% inv_thd_check and inv_grid_thd_check are what prove that.
+%
+%   in   gates  (6)  [a+ a- b+ b- c+ c-]  - the Six-Pulse Gate Multiplexer order
+%   out  v_pole (3)  each leg output referred to the DC NEGATIVE RAIL, not to
+%                    ground: the DC bus floats in the grid-connected model
+%   in/out  DCp DCn (left)   a b c (right)
+%
+% GATE NUMBERING. The S1..S6 tags use the classic firing-sequence convention
+% from the textbooks - S1/S3/S5 are the upper devices of a/b/c, S4/S6/S2 the
+% lower ones. That is NOT the order the modulator emits, which is by leg:
+%
+%       tag   device      gates(...)
+%       S1    a upper         1
+%       S4    a lower         2
+%       S3    b upper         3
+%       S6    b lower         4
+%       S5    c upper         5
+%       S2    c lower         6
+%
+% The uppers coincide (S1/S3/S5 <- 1/3/5) and the lowers do not. That is what
+% makes this mapping dangerous to transcribe: a mistake looks right on the top
+% row and silently swaps the lower devices between phases, which is
+% shoot-through. Verified by firing one gate at a time into a split DC bus.
+br = [lib '/Bridge'];
+add_block('built-in/Subsystem', br, 'Position', [200 660 340 780]);
+clearSubsystem(br);
+
+port(br, 'DCp', 1, 'Left',  [40  25  50  45]);
+port(br, 'DCn', 2, 'Left',  [40 690  50 710]);
+port(br, 'a',   3, 'Right', [1180 250 1190 270]);
+port(br, 'b',   4, 'Right', [1180 300 1190 320]);
+port(br, 'c',   5, 'Right', [1180 350 1190 370]);
+
+addb(br, 'simulink/Sources/In1',          'gates', [40 330 70 344]);
+addb(br, 'simulink/Signal Routing/Demux', 'Demux', [110 120 115 600]);
+set_param([br '/Demux'], 'Outputs', '6');
+wire(br, 'gates/1', 'Demux/1');
+
+% gates(k) -> the tag that drives it
+tagOf  = {'S1','S4','S3','S6','S5','S2'};        % by gates index
+for k = 1:6
+    y = 120 + 90*(k-1);
+    addb(br, 'simulink/Signal Routing/Goto', ['Goto_' tagOf{k}], [150 y 210 y+25]);
+    set_param([br '/Goto_' tagOf{k}], 'GotoTag', tagOf{k}, 'TagVisibility', 'local');
+    wire(br, sprintf('Demux/%d',k), ['Goto_' tagOf{k} '/1']);
+end
+
+% three legs: upper row S1 S3 S5, lower row S4 S6 S2
+legTag = {'S1','S3','S5'; 'S4','S6','S2'};       % row 1 upper, row 2 lower
+phn    = {'a','b','c'};
+addb(br, 'simulink/Signal Routing/Mux', 'Mux_vpole', [1080 545 1085 665]);
+set_param([br '/Mux_vpole'], 'Inputs', '3');
+addb(br, 'simulink/Sinks/Out1', 'v_pole', [1150 598 1180 612]);
+
+for k = 1:3
+    x0 = 300 + 260*(k-1);
+    for r = 1:2
+        yb  = 100 + 260*(r-1);
+        tag = legTag{r,k};
+        addb(br, 'simulink/Signal Routing/From', ['From_' tag], [x0 yb x0+50 yb+25]);
+        set_param([br '/From_' tag], 'GotoTag', tag);
+        addb(br, 'nesl_utility/Simulink-PS Converter', ['gate_' tag], [x0 yb+45 x0+50 yb+85]);
+        addb(br, 'ee_lib/Semiconductors & Converters/IGBT (Ideal, Switching)', tag, ...
+             [x0+80 yb+35 x0+150 yb+105]);
+        set_param([br '/' tag], ...
+            'diode_param','ee.enum.semiconductors.protectionDiode.nodynamics', ...
+            'Vth','ip.Vth_gate', 'Vf','ip.Vf_dev', 'Ron','ip.Ron_dev', 'Goff','ip.Goff_dev', ...
+            'diode_Vf','ip.Vf_dev', 'diode_Ron','ip.Ron_dev', 'diode_Goff','ip.Goff_dev');
+        wire(br, ['From_' tag '/1'],  ['gate_' tag '/1']);
+        wire(br, ['gate_' tag '/R1'], [tag '/L1']);              % gate
+    end
+    up = legTag{1,k};  lo = legTag{2,k};
+    wire(br, 'DCp/L1',    [up '/R1']);                           % DC+ -> upper C
+    wire(br, [up '/R2'],  [lo '/R1']);                           % upper E -> lower C = pole
+    wire(br, [lo '/R2'],  'DCn/L1');                             % lower E -> DC-
+    wire(br, [up '/R2'],  [phn{k} '/L1']);                       % pole -> phase port
+
+    % pole voltage sensed directly under its own leg, so the measurement chain
+    % stays next to what it measures instead of crossing the diagram
+    addb(br, 'ee_lib/Sensors & Transducers/Voltage Sensor', ['Vp_' phn{k}], ...
+         [x0+155 545 x0+205 585]);
+    addb(br, 'nesl_utility/PS-Simulink Converter', ['v_pole_' phn{k}], ...
+         [x0+155 615 x0+205 655]);
+    wire(br, ['Vp_' phn{k} '/L1'], [up '/R2']);
+    wire(br, ['Vp_' phn{k} '/R2'], 'DCn/L1');
+    wire(br, ['Vp_' phn{k} '/R1'], ['v_pole_' phn{k} '/L1']);
+    wire(br, ['v_pole_' phn{k} '/1'], ['Mux_vpole/' num2str(k)]);
+end
+wire(br, 'Mux_vpole/1', 'v_pole/1');
+
+% grouping boxes - what turns six switches and their plumbing into a diagram
+area(br, 'Gate driver  -  gates(1..6) fanned out to the S1..S6 tags', ...
+     [28 95 228 645], '[0.90 0.90 1.00]');
+for k = 1:3
+    x0 = 300 + 260*(k-1);
+    area(br, sprintf('Leg %s   -  %s upper / %s lower', upper(phn{k}), ...
+         legTag{1,k}, legTag{2,k}), [x0-25 75 x0+175 480], '[0.90 1.00 0.90]');
+end
+area(br, 'Pole voltage measurement  -  each leg referred to the DC NEGATIVE rail', ...
+     [420 500 1235 690], '[0.94 0.94 0.94]');
 
 %% ===================================================================== LCLFilter
 % L1 - Cf/Rd - L2, wye capacitor bank with a FLOATING star point (three-wire:
@@ -198,8 +308,8 @@ for k = 1:3
     y = 40 + 100*(k-1);
     addb(lf, 'ee_lib/Sensors & Transducers/Current Sensor', ['I1_' phn{k}], [140 y 190 y+40]);
     addb(lf, 'ee_lib/Sensors & Transducers/Current Sensor', ['I2_' phn{k}], [940 y 990 y+40]);
-    addb(lf, 'nesl_utility/PS-Simulink Converter', ['PS_i1' phn{k}], [860 700+70*(k-1) 910 740+70*(k-1)]);
-    addb(lf, 'nesl_utility/PS-Simulink Converter', ['PS_i2' phn{k}], [860 880+70*(k-1) 910 920+70*(k-1)]);
+    addb(lf, 'nesl_utility/PS-Simulink Converter', ['i1_' phn{k}], [860 700+70*(k-1) 910 740+70*(k-1)]);
+    addb(lf, 'nesl_utility/PS-Simulink Converter', ['i2_' phn{k}], [860 880+70*(k-1) 910 920+70*(k-1)]);
 
     wire(lf, [phn{k} '_inv/L1'],   ['I1_' phn{k} '/L1']);
     wire(lf, ['I1_' phn{k} '/R2'], ['L1_branch/L' num2str(k)]);
@@ -208,15 +318,20 @@ for k = 1:3
     wire(lf, ['L2_branch/R' num2str(k)], ['I2_' phn{k} '/L1']);
     wire(lf, ['I2_' phn{k} '/R2'], [phn{k} '_grid/L1']);
 
-    wire(lf, ['I1_' phn{k} '/R1'], ['PS_i1' phn{k} '/L1']);
-    wire(lf, ['PS_i1' phn{k} '/1'], ['Mux_i1/' num2str(k)]);
-    wire(lf, ['I2_' phn{k} '/R1'], ['PS_i2' phn{k} '/L1']);
-    wire(lf, ['PS_i2' phn{k} '/1'], ['Mux_i2/' num2str(k)]);
+    wire(lf, ['I1_' phn{k} '/R1'], ['i1_' phn{k} '/L1']);
+    wire(lf, ['i1_' phn{k} '/1'], ['Mux_i1/' num2str(k)]);
+    wire(lf, ['I2_' phn{k} '/R1'], ['i2_' phn{k} '/L1']);
+    wire(lf, ['i2_' phn{k} '/1'], ['Mux_i2/' num2str(k)]);
 end
 wire(lf, 'Cf_branch/R1', 'Cf_branch/R2');      % floating capacitor star point
 wire(lf, 'Cf_branch/R2', 'Cf_branch/R3');
 wire(lf, 'Mux_i1/1', 'i1_abc/1');
 wire(lf, 'Mux_i2/1', 'i2_abc/1');
+
+area(lf, 'L1   inverter side   sized for the ripple current', [275 15 405 325], '[0.90 1.00 0.90]');
+area(lf, 'Cf + Rd   damped shunt, FLOATING star point', [530 395 665 685], '[0.90 0.90 1.00]');
+area(lf, 'L2   grid side   what the capacitor works against', [735 15 865 325], '[0.90 1.00 0.90]');
+area(lf, 'Current measurement   i1 is controlled, i2 is what the grid sees (THD)', [110 690 1130 1045], '[0.94 0.94 0.94]');
 
 %% ============================================================== Modulator_SVPWM
 % STUB - Belal owns the real modulator. This exists so the LCL can be verified
@@ -350,10 +465,27 @@ add_block('built-in/PMIOPort', [parent '/' name]);
 set_param([parent '/' name], 'Port', num2str(num), 'Side', side, 'Position', pos);
 end
 
+function area(parent, label, pos, colour)
+%AREA  Labelled grouping box. Purely cosmetic, but it is what turns a wall of
+%      blocks into something a teammate can read at a glance.
+persistent n
+if isempty(n), n = 0; end
+n = n + 1;
+nm = sprintf('%s/__area%d', parent, n);
+add_block('built-in/Area', nm, 'Position', pos);
+as = find_system(bdroot(parent), 'FindAll','on', 'Type','annotation');
+for k = 1:numel(as)
+    if strcmp(get_param(as(k),'Name'), sprintf('__area%d', n))
+        set_param(as(k), 'Name', label, 'BackgroundColor', colour);
+        break
+    end
+end
+end
+
 function wire(parent, from, to, name)
 %WIRE  "Block/port" to "Block/port". A port written "L3"/"R2" is a physical
 %      connection port; a bare number is a signal port.
-h = add_line(parent, portOf(parent, from, 'out'), portOf(parent, to, 'in'), 'autorouting','on');
+h = add_line(parent, portOf(parent, from, 'out'), portOf(parent, to, 'in'), 'autorouting','smart');
 if nargin > 3, set_param(h, 'Name', name); end
 end
 

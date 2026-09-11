@@ -24,10 +24,12 @@ function buildInvBridge120()
 % Owner: Duc Pham
 
 mdl  = 'invBridge120';
+lib  = 'invLib';
 here = fileparts(mfilename('fullpath'));
 addpath(here);
 
 if bdIsLoaded(mdl), close_system(mdl, 0); end
+if ~bdIsLoaded(lib), load_system(fullfile(here, [lib '.slx'])); end
 new_system(mdl);
 open_system(mdl);
 
@@ -89,57 +91,10 @@ wire(s, 'Gates_vector/1',  'gates/1');
 wire(s, 'Gating_120deg/2', 'theta/1');
 
 %% ===================================================================== Bridge
-s = subsys(mdl, 'Bridge', [420 60 540 240]);
-addb(s, 'simulink/Sources/In1',          'gates', [30 480 60 494]);
-addb(s, 'simulink/Signal Routing/Demux', 'Demux', [110 340 115 640]);
-set_param([s '/Demux'], 'Outputs', '6');
-addb(s, 'ee_lib/Semiconductors & Converters/Converters/Six-Pulse Gate Multiplexer', ...
-        'GateMux', [280 335 350 645]);
-for k = 1:6
-    y = 340 + 50*(k-1);
-    addb(s, 'nesl_utility/Simulink-PS Converter', sprintf('S2PS_%d',k), [180 y-5 230 y+35]);
-    wire(s, sprintf('Demux/%d',k),   sprintf('S2PS_%d/1',k));
-    wire(s, sprintf('S2PS_%d/R1',k), sprintf('GateMux/L%d',k));
-end
-wire(s, 'gates/1', 'Demux/1');
-
-addb(s, 'ee_lib/Semiconductors & Converters/Converters/Converter (Three-Phase)', ...
-        'Converter', [450 60 570 280]);
-set_param([s '/Converter'], ...
-    'port_option','ee.enum.threePhasePort.expanded', ...
-    'device_type','ee.enum.converters.switchingdevice.igbt', ...
-    'diode_param','ee.enum.converters.protectiondiode.nodynamics', ...
-    'Vth','ip.Vth_gate', 'Vf','ip.Vf_dev', 'Ron','ip.Ron_dev', 'Goff','ip.Goff_dev', ...
-    'diode_Vf','ip.Vf_dev', 'diode_Ron','ip.Ron_dev', 'BlockMirror','on');
-wire(s, 'GateMux/R1', 'Converter/L1');
-
-port(s, 'DCp', 1, 'Left',  [40 100 50 120]);
-port(s, 'DCn', 2, 'Left',  [40 200 50 220]);
-port(s, 'a',   3, 'Right', [950 100 960 120]);
-port(s, 'b',   4, 'Right', [950 170 960 190]);
-port(s, 'c',   5, 'Right', [950 240 960 260]);
-wire(s, 'DCp/L1', 'Converter/R1');
-wire(s, 'DCn/L1', 'Converter/R2');
-
-% Pole voltages: each leg output referred to the DC negative rail. This is the
-% waveform that shows the switching pattern directly, so it is the first place
-% to look when the gating is wrong.
-addb(s, 'ee_lib/Connectors & References/Electrical Reference', 'Gnd_meas', [660 720 700 750]);
-addb(s, 'simulink/Signal Routing/Mux', 'Mux_vpole', [860 480 865 620]);
-set_param([s '/Mux_vpole'], 'Inputs', '3');
-addb(s, 'simulink/Sinks/Out1', 'v_pole', [930 543 960 557]);
-ph = {'a','b','c'};
-for k = 1:3
-    y = 470 + 70*(k-1);
-    addb(s, 'ee_lib/Sensors & Transducers/Voltage Sensor', ['V_pole_' ph{k}], [650 y 700 y+40]);
-    addb(s, 'nesl_utility/PS-Simulink Converter',          ['PS2S_' ph{k}],   [760 y 810 y+40]);
-    wire(s, ['Converter/L' num2str(k+1)], [ph{k} '/L1']);
-    wire(s, ['V_pole_' ph{k} '/L1'], ['Converter/L' num2str(k+1)]);
-    wire(s, ['V_pole_' ph{k} '/R2'], 'Gnd_meas/L1');
-    wire(s, ['V_pole_' ph{k} '/R1'], ['PS2S_' ph{k} '/L1']);
-    wire(s, ['PS2S_' ph{k} '/1'],    ['Mux_vpole/' num2str(k)]);
-end
-wire(s, 'Mux_vpole/1', 'v_pole/1');
+% Linked from invLib: six discrete IGBTs with S1..S6 gate tags, the textbook
+% layout. Electrically identical to the Converter (Three-Phase) block it
+% replaces - this script's own checks are what prove that.
+add_block([lib '/Bridge'], [mdl '/Bridge'], 'Position', [420 60 540 240]);
 
 %% ===================================================================== ACLoad
 % Placeholder for the LCL filter + grid. Balanced wye, floating neutral - the
@@ -234,6 +189,10 @@ set_param(mdl, 'SolverType','Fixed-step', 'Solver','FixedStepDiscrete', ...
     'SaveOutput','on', 'SaveFormat','Dataset', ...
     'SignalLogging','on', 'SignalLoggingName','logsout');
 
+area(mdl, 'Power path   DC bus -> bridge -> wye R load', [165 30 800 265], '[0.90 1.00 0.90]');
+area(mdl, '120-degree gating   the block SVPWM replaces', [165 280 345 425], '[0.90 0.90 1.00]');
+area(mdl, 'Derived quantities + telemetry', [830 35 1165 440], '[0.94 0.94 0.94]');
+
 note(mdl, [60 620], { ...
     '120-degree conduction (six-step) three-phase VSI - gating and topology validation.'
     'Six-step is 31% THD with the 5th harmonic at 250 Hz, so it cannot reach the <5% target;'
@@ -302,7 +261,7 @@ function wire(parent, from, to, name)
 %      physical connection port (LConn 3 / RConn 2); a bare number is a signal
 %      port. An optional fourth argument names the signal.
 h = add_line(parent, resolvePort(parent, from, 'out'), ...
-                     resolvePort(parent, to,   'in'), 'autorouting','on');
+                     resolvePort(parent, to,   'in'), 'autorouting','smart');
 if nargin > 3, set_param(h, 'Name', name); end
 end
 
@@ -320,6 +279,23 @@ if any(tok(1) == 'LR')
 else
     idx = str2double(tok);
     if strcmp(dir, 'out'), h = ph.Outport(idx); else, h = ph.Inport(idx); end
+end
+end
+
+function area(parent, label, pos, colour)
+%AREA  Labelled grouping box. Cosmetic, but it is what turns a wall of blocks
+%      into something a teammate can read at a glance.
+persistent n
+if isempty(n), n = 0; end
+n = n + 1;
+nm = sprintf('%s/__area%d', parent, n);
+add_block('built-in/Area', nm, 'Position', pos);
+as = find_system(bdroot(parent), 'FindAll','on', 'Type','annotation');
+for k = 1:numel(as)
+    if strcmp(get_param(as(k),'Name'), sprintf('__area%d', n))
+        set_param(as(k), 'Name', label, 'BackgroundColor', colour);
+        break
+    end
 end
 end
 
