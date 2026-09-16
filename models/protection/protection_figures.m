@@ -51,8 +51,49 @@ outB = sim(inB);
 figure1_phaseReset(outA, pp, outdir);
 figure2_currentFFT(outA, pp, outdir);
 figure3_islandEvent(outB, pp, outdir);
+figure4_islandFrequency(outB, pp, outdir);
 
 fprintf('\nFigures written to %s\n', outdir);
+end
+
+% ---------------------------------------------------------------------
+function figure4_islandFrequency(out, pp, outdir)
+%FIGURE4_ISLANDFREQUENCY PCC frequency per cycle, across the island event.
+%   Grid-connected the grid pins the frequency at f_n. Once islanded the
+%   load must satisfy the phase the SFS block imposes on the injected
+%   current, which forces it off resonance. This figure is the evidence
+%   that the SFS mechanism acts at all.
+sl = out.simlog;
+t = sl.RLC_Load.R_load.v.series.time;
+v = sl.RLC_Load.R_load.v.series.values;
+
+% per-cycle frequency from rising zero crossings, linearly interpolated
+tu = linspace(t(1), t(end), 2000001);
+vu = interp1(t, v, tu);
+s  = sign(vu);
+k  = find(s(1:end-1) < 0 & s(2:end) >= 0);
+tc = tu(k) - vu(k).*(tu(k+1) - tu(k))./(vu(k+1) - vu(k));
+f  = 1./diff(tc);
+tf = tc(2:end);
+
+pre  = mean(f(tf > 0.50 & tf < 0.95));
+post = mean(f(tf > pp.t_island + 0.05 & tf < pp.t_island + 0.50));
+
+fg = figure('Color', 'w', 'Position', [100 100 900 400]);
+plot(tf, f, 'LineWidth', 1.3); grid on; hold on
+xline(pp.t_island, 'r--', 'LineWidth', 1.4, 'Label', 'island');
+yline(pp.f_n, ':', 'LineWidth', 1.1, 'Label', 'nominal');
+yline(pp.f_max, 'm--', 'LineWidth', 1.2, 'Label', 'over-frequency trip');
+xlabel('Time (s)');
+ylabel('PCC frequency (Hz)');
+ylim([pp.f_n - 0.5, max(pp.f_max + 0.3, pp.f_n + 0.8)]);
+title(sprintf(['PCC frequency across the island: %.4f Hz grid-connected, %.4f Hz islanded\n' ...
+    'the SFS phase advance forces the load off resonance; it settles rather than ' ...
+    'running away because fpcc is still a constant'], pre, post));
+exportgraphics(fg, fullfile(outdir, 'fig4_island_frequency.png'), 'Resolution', 200);
+close(fg);
+fprintf('fig4: PCC frequency %.4f Hz connected -> %.4f Hz islanded (trip band %.1f-%.1f Hz)\n', ...
+    pre, post, pp.f_min, pp.f_max);
 end
 
 % ---------------------------------------------------------------------
@@ -81,18 +122,32 @@ tw = t(w);
 vw = v(w);
 expected = mod(tw, 1/pp.f_n);        % what a ramp locked to V_PCC looks like
 
+% Label according to what was actually measured, so the figure cannot
+% contradict itself once the reset is working.
+rise   = max(vw) - min(vw);
+locked = rise < 1.5/pp.f_n;
+
 f = figure('Color', 'w', 'Position', [100 100 900 380]);
 plot(tw, vw, 'LineWidth', 1.6); hold on
 plot(tw, expected, '--', 'LineWidth', 1.4);
 grid on
 xlabel('Time (s)');
 ylabel('Phase reference \tau (s)');
-title(sprintf(['Phase reference free-runs instead of resetting\n' ...
-    'measured rise %.3f s across this window; a locked ramp resets every %.0f ms'], ...
-    max(vw) - min(vw), 1000/pp.f_n));
-legend({'\tau as measured (never resets)', ...
-        sprintf('\\tau if locked to V_{PCC} zero crossings (%g Hz)', pp.f_n)}, ...
-        'Location', 'northwest');
+if locked
+    title(sprintf(['Phase reference locked to the PCC voltage zero crossings\n' ...
+        'resets every %.2f ms against a %.0f ms period; measured and expected coincide'], ...
+        rise*1000, 1000/pp.f_n));
+    legend({'\tau as measured', ...
+            sprintf('\\tau expected if locked (%g Hz)', pp.f_n)}, ...
+            'Location', 'northwest');
+else
+    title(sprintf(['Phase reference free-runs instead of resetting\n' ...
+        'rises %.3f s across this window; a locked ramp would reset every %.0f ms'], ...
+        rise, 1000/pp.f_n));
+    legend({'\tau as measured (never resets)', ...
+            sprintf('\\tau if locked to V_{PCC} zero crossings (%g Hz)', pp.f_n)}, ...
+            'Location', 'northwest');
+end
 exportgraphics(f, fullfile(outdir, 'fig1_phase_reset.png'), 'Resolution', 200);
 close(f);
 fprintf('fig1: tau rises %.4f s over a %.2f s window (a reset ramp would peak at %.4f s)\n', ...
@@ -109,11 +164,18 @@ sl = out.simlog;
 t = sl.Inverter_CCS.i.series.time;
 i = sl.Inverter_CCS.i.series.values;
 
+% The Simscape log retains only its last N points, and how much simulated
+% time that covers depends on how hard the solver worked. Take the largest
+% whole number of cycles that actually fits.
 Ts   = 1e-5;
-ncyc = 4;
-t2 = t(end) - 0.005;
+span = (t(end) - 0.002) - t(1);
+ncyc = floor(span*pp.f_n);
+assert(ncyc >= 2, ...
+    'Logged range spans only %.4f s (%.1f cycles); need at least 2.', span, span*pp.f_n);
+ncyc = min(ncyc, 8);
+t2 = t(end) - 0.002;
 t1 = t2 - ncyc/pp.f_n;
-assert(t1 >= t(1), 'Logged range too short for %d cycles.', ncyc);
+fprintf('fig2: using %d cycles from %.4f-%.4f s\n', ncyc, t1, t2);
 
 tu = t1:Ts:t2;
 iu = interp1(t, i, tu, 'linear');
