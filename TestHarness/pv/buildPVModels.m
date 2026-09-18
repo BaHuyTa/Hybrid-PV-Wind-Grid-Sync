@@ -36,7 +36,7 @@ end
 here   = fileparts(mfilename("fullpath"));
 outDir = fullfile(fileparts(here), "models");
 P      = pvParams(variant);
-src    = fullfile(fileparts(fileparts(here)), "Belal's PV", "solarsimulink.slx");
+src    = fullfile(fileparts(fileparts(here)), "models", "pv", "solarsimulink.slx");
 
 if ~isfile(src)
     error("buildPVModels:noSource", ...
@@ -101,9 +101,9 @@ set_param(mdl, SignalLogging = "on", SignalLoggingName = "logsout", ...
 % Variant: patch the perturbation size in the P&O source.
 % Targeted at the exact assignment rather than a blanket replace, and verified,
 % because a silent no-op here would produce a "variant" identical to nominal --
-% and the run would look like proof that dD does not matter.
+% and the run would look like proof that dV does not matter.
 if variant ~= "nominal"
-    patchPerturbation(mdl, P.ctrl.dD);
+    patchPerturbation(mdl, P.ctrl.dV);
 end
 
 save_system(mdl, uut);
@@ -118,16 +118,30 @@ if variant == "nominal" || ~isfile(sweep)
     mdl = char(P.uut.sweepModel);
     sub = [mdl '/MPPT Controller'];
 
-    delete_line(sub, "V/1",       "PO MPPT/1");
-    delete_line(sub, "I/1",       "PO MPPT/2");
-    delete_line(sub, "PO MPPT/1", "Duty/1");
-    delete_line(sub, "PO MPPT/1", "Duty Delay/1");
-    pos = get_param([sub '/PO MPPT'], "Position");
-    delete_block([sub '/PO MPPT']);
+    % Since 9 Sep the chain is P&O -> Verr -> Voltage PI -> duty. Remove all
+    % three and drive duty directly. Lines are found through port handles, not
+    % names, so a re-routed diagram does not break the surgery.
+    piOut = get_param([sub '/Voltage PI'], "PortHandles").Outport;
+    dst   = get_param(get_param(piOut, "Line"), "DstPortHandle");
+    pos   = get_param([sub '/Voltage PI'], "Position");
+    for blk = ["PO MPPT", "Verr", "Voltage PI"]
+        lh = get_param(sub + "/" + blk, "LineHandles");
+        for h = [lh.Inport, lh.Outport]
+            if h > 0; delete_line(h); end
+        end
+        delete_block(sub + "/" + blk);
+    end
+    % V fed both P&O and Verr; drop whatever is left dangling from it.
+    for s = ["V", "I"]
+        lh = get_param(sub + "/" + s, "LineHandles");
+        if lh.Outport > 0; delete_line(lh.Outport); end
+    end
 
     add_block("simulink/Sources/Constant", [sub '/D_fix'], Position = pos, Value = "D_fix");
-    add_line(sub, "D_fix/1", "Duty/1",       autorouting = "on");
-    add_line(sub, "D_fix/1", "Duty Delay/1", autorouting = "on");
+    ph = get_param([sub '/D_fix'], "PortHandles");
+    for d = dst(:)'
+        add_line(sub, ph.Outport, d, autorouting = "on");
+    end
 
     % The sensor inports now feed nothing, and Simulink treats an unconnected
     % Inport output as an error. They are terminated rather than deleted so both
@@ -143,12 +157,12 @@ if variant == "nominal" || ~isfile(sweep)
     close_system(mdl, 0);
 end
 
-fprintf("Built %s (dD = %.3f) from solarsimulink.slx\n", P.uut.model, P.ctrl.dD);
+fprintf("Built %s (dV = %.2f V) from models/pv/solarsimulink.slx\n", P.uut.model, P.ctrl.dV);
 end
 
 % -----------------------------------------------------------------------------
-function patchPerturbation(mdl, dD)
-%PATCHPERTURBATION Rewrite the dD literal inside the P&O MATLAB Function block.
+function patchPerturbation(mdl, dV)
+%PATCHPERTURBATION Rewrite the dV literal inside the P&O MATLAB Function block.
 chart = sfroot().find("-isa", "Stateflow.EMChart", ...
                       "Path", mdl + "/MPPT Controller/PO MPPT");
 if isempty(chart)
@@ -156,10 +170,10 @@ if isempty(chart)
 end
 
 old = chart.Script;
-new = regexprep(old, "dD\s*=\s*[\d.eE+-]+\s*;", sprintf("dD = %g;", dD), "once");
+new = regexprep(old, "dV\s*=\s*[\d.eE+-]+\s*;", sprintf("dV   = %g;", dV), "once");
 if strcmp(new, old)
     error("buildPVModels:patchFailed", ...
-          "The dD assignment was not found in the P&O source, so the variant " + ...
+          "The dV assignment was not found in the P&O source, so the variant " + ...
           "would have been identical to nominal. The block has been rewritten " + ...
           "upstream -- re-read it before trusting any variant result.");
 end

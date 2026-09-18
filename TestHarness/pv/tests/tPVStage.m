@@ -106,7 +106,7 @@ classdef tPVStage < matlab.unittest.TestCase
             buildPVModels("fastPO");
             root = fileparts(fileparts(mfilename("fullpath")));
 
-            dD = zeros(1, 2);
+            dV = zeros(1, 2);
             names = ["pvUUT", "pvUUT_fastPO"];
             for k = 1:2
                 if ~bdIsLoaded(names(k))
@@ -114,16 +114,16 @@ classdef tPVStage < matlab.unittest.TestCase
                 end
                 chart = sfroot().find("-isa", "Stateflow.EMChart", ...
                             "Path", char(names(k) + "/MPPT Controller/PO MPPT"));
-                tok = regexp(chart.Script, "dD\s*=\s*([\d.eE+-]+)\s*;", "tokens", "once");
+                tok = regexp(chart.Script, "dV\s*=\s*([\d.eE+-]+)\s*;", "tokens", "once");
                 testCase.assertNotEmpty(tok, ...
-                    "Could not read dD out of " + names(k) + ".");
-                dD(k) = str2double(tok{1});
+                    "Could not read dV out of " + names(k) + ".");
+                dV(k) = str2double(tok{1});
             end
 
-            testCase.verifyEqual(dD(1), 0.002, ...
+            testCase.verifyEqual(dV(1), 0.5, ...
                 "pvUUT should carry the delivered perturbation size.", ...
                 AbsTol = 1e-12);
-            testCase.verifyEqual(dD(2), 0.010, ...
+            testCase.verifyEqual(dV(2), 2.5, ...
                 "pvUUT_fastPO should carry the patched perturbation size.", ...
                 AbsTol = 1e-12);
         end
