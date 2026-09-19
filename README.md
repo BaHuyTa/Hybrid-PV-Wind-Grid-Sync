@@ -47,7 +47,8 @@ params/       shared parameter files — single source of truth
 models/
   wind/       turbine, PMSG, rectifier, boost      Huy
   pv/         PV array, boost, MPPT                Belal
-  control/    SRF-PLL, dq current loop, DC-link    Aqib, Duc
+  inverter/   dq current loop, SVPWM, LCL filter   Duc
+  control/    SRF-PLL, DC-link voltage loop        Aqib
   protection/ SFS anti-islanding, NDZ analysis     Redhwan
   integration/ top-level model, DC link, harness   Hoang
 scripts/      analysis + verification scripts

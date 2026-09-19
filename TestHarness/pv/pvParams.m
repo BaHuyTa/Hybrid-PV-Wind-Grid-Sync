@@ -24,7 +24,7 @@ end
 % Belal's file is READ ONLY as far as this harness is concerned. buildPVModels
 % copies it and instruments the copy. Editing a teammate's model in place is how
 % you end up unable to answer "did my change break it, or was it already broken?"
-P.uut.sourceModel = fullfile("..", "..", "Belal's PV", "solarsimulink.slx");
+P.uut.sourceModel = fullfile("..", "..", "models", "pv", "solarsimulink.slx");
 P.uut.sweepModel  = "pvSweep";   % same plant, MPPT replaced by a fixed duty
 
 %% Maximum-power reference
@@ -40,9 +40,10 @@ P.sweep.stopTime  = 0.08;             % output RC is 9.8 ms; 8 tau is settled
 P.sweep.avgWindow = 0.02;             % average the last 20 ms
 
 %% Controller knobs -- the variant axis
-% P&O perturbs duty by dD every Ts. That product is a SLEW RATE, and it caps how
-% fast the stage can chase a cloud edge regardless of how good everything else
-% is. As delivered: 0.002 per 10 ms = 0.2 duty per second.
+% P&O perturbs a panel-VOLTAGE reference by dV every Ts, and a PI sets duty to
+% follow it (restructured by Belal, 9 Sep 2026; the 3 Sep model stepped duty by
+% dD = 0.002 directly). dV/Ts is a SLEW RATE that caps how fast the stage can
+% chase a cloud edge. As delivered: 0.5 V per 10 ms = 50 V per second.
 %
 % The variant exists to answer the question a bug report cannot: is the
 % delivered value the cause, and does raising it actually fix the problem?
@@ -53,9 +54,9 @@ P.sweep.avgWindow = 0.02;             % average the last 20 ms
 % has given someone a decision they can actually make.
 switch variant
     case "nominal"
-        P.ctrl.dD = 0.002;   % as delivered
+        P.ctrl.dV = 0.5;     % [V] as delivered
     case "fastPO"
-        P.ctrl.dD = 0.010;   % candidate fix: 5x the slew rate
+        P.ctrl.dV = 2.5;     % [V] candidate fix: 5x the slew rate
     otherwise
         error("pvParams:badVariant", ...
               "variant must be ""nominal"" or ""fastPO"", got ""%s"".", variant);
@@ -66,11 +67,11 @@ P.ctrl.trendPeriods = 10;  % perturbations to average over when asking whether
                            % dithers. See evaluatePVSpec for why one filter
                            % cannot answer both questions.
 P.ctrl.variant  = variant;
-P.ctrl.Dmin     = 0.05;    % hard-coded inside the P&O function block
+P.ctrl.Dmin     = 0.05;    % Voltage PI saturation limits
 P.ctrl.Dmax     = 0.95;
-P.ctrl.slewRate = P.ctrl.dD / P.ctrl.Ts;   % [duty/s]
+P.ctrl.slewRate = P.ctrl.dV / P.ctrl.Ts;   % [V/s]
 
-% dD is a literal inside the MATLAB Function block, not a tunable parameter, so
+% dV is a literal inside the MATLAB Function block, not a tunable parameter, so
 % a variant cannot be injected at run time the way the DC-link harness injects
 % its P struct. Each variant therefore gets its own generated model, and
 % buildPVModels patches the literal in the copy. The original stays untouched.
