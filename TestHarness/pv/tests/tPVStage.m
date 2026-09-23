@@ -104,9 +104,9 @@ classdef tPVStage < matlab.unittest.TestCase
             % result rather than trusting the raise.
             buildPVModels("nominal");
             buildPVModels("fastPO");
-            root = fileparts(fileparts(mfilename("fullpath")));
+            root = fileparts(fileparts(fileparts(mfilename("fullpath"))));
 
-            dD = zeros(1, 2);
+            dV = zeros(1, 2);
             names = ["pvUUT", "pvUUT_fastPO"];
             for k = 1:2
                 if ~bdIsLoaded(names(k))
@@ -114,16 +114,16 @@ classdef tPVStage < matlab.unittest.TestCase
                 end
                 chart = sfroot().find("-isa", "Stateflow.EMChart", ...
                             "Path", char(names(k) + "/MPPT Controller/PO MPPT"));
-                tok = regexp(chart.Script, "dD\s*=\s*([\d.eE+-]+)\s*;", "tokens", "once");
+                tok = regexp(chart.Script, "dV\s*=\s*([\d.eE+-]+)\s*;", "tokens", "once");
                 testCase.assertNotEmpty(tok, ...
-                    "Could not read dD out of " + names(k) + ".");
-                dD(k) = str2double(tok{1});
+                    "Could not read dV out of " + names(k) + ".");
+                dV(k) = str2double(tok{1});
             end
 
-            testCase.verifyEqual(dD(1), 0.002, ...
+            testCase.verifyEqual(dV(1), 0.5, ...
                 "pvUUT should carry the delivered perturbation size.", ...
                 AbsTol = 1e-12);
-            testCase.verifyEqual(dD(2), 0.010, ...
+            testCase.verifyEqual(dV(2), 2.5, ...
                 "pvUUT_fastPO should carry the patched perturbation size.", ...
                 AbsTol = 1e-12);
         end
@@ -151,11 +151,19 @@ classdef tPVStage < matlab.unittest.TestCase
                 "is being measured on the dither again.");
 
             % ...and the dither must still be visible to the ripple check,
-            % otherwise the trend filter has simply hidden the trade-off.
-            testCase.verifyGreaterThan(m.powerRipplePct, P.spec.powerRipplePct, ...
-                "cloud_ramp/fastPO should FAIL the ripple spec. If it passes, " + ...
-                "the ripple metric has been smoothed along with the trend and " + ...
-                "the cost of the faster controller has gone invisible.");
+            % otherwise the trend filter has simply hidden the trade-off. The
+            % 3 Sep duty-step model dithered hard enough to fail the ripple spec
+            % outright; the 9 Sep voltage-reference P&O sits so close to the
+            % flat top of the P-V curve that even 2.5 V steps cost ~0.01 % of
+            % power. So compare against the nominal step instead of the spec:
+            % five times the step must still show up as clearly more ripple.
+            [out, P, meta, ref] = runPVScenario("cloud_ramp", Variant = "nominal");
+            mNom = evaluatePVSpec(out, P, meta, ref);
+            testCase.verifyGreaterThan(m.powerRipplePct, 5 * mNom.powerRipplePct, ...
+                "cloud_ramp/fastPO should show far more ripple than nominal. " + ...
+                "If it does not, the ripple metric has been smoothed along " + ...
+                "with the trend and the cost of the faster controller has " + ...
+                "gone invisible.");
         end
 
         function harnessDoesNotReportUncheckedRequirements(testCase)
@@ -183,7 +191,7 @@ classdef tPVStage < matlab.unittest.TestCase
             pvDir = fileparts(fileparts(mfilename("fullpath")));
             root  = fileparts(pvDir);
 
-            src = dir(fullfile(fileparts(root), "Belal's PV", "solarsimulink.slx"));
+            src = dir(fullfile(fileparts(root), "models", "pv", "solarsimulink.slx"));
             bld = dir(fullfile(pvDir, "buildPVModels.m"));
             uut = dir(fullfile(root, "models", "pvUUT.slx"));
 
