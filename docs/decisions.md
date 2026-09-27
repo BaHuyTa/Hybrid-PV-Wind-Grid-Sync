@@ -99,6 +99,40 @@ a disturbance scenario only.
 
 ---
 
+## 2026-09-23 — PV MPPT judged by IEC 62891 / EN 50530, not by the harness's own scenarios
+
+**Decided.** The PV stage's MPPT is verified with the standard efficiency procedure
+(`TestHarness/pv/runPVIEC.m`). The harness's six hand-written scenarios (`runPVAll`)
+stay, as regression.
+
+**Why.** The six scenarios all run at 25 °C, where the panel's maximum-power voltage
+barely moves with irradiance — so a voltage-reference P&O starts every one of them
+already at the peak, and scores 100 % with 0 s reacquisition. That is a test that
+cannot fail, not a pass. The standard fixes both gaps: it spans three MPP voltages
+and seven power levels (static), and it scores **energy** over defined irradiance
+ramps (dynamic), which is where P&O loses.
+
+**Which standard.** IEC 62891:2020 (EN 50530:2010+A1:2013 is its European
+predecessor). No Australian standard covers MPPT efficiency — AS/NZS 4777.2 governs
+the grid side only — so the report should cite IEC 62891 for the PV stage and
+AS/NZS 4777.2 for the inverter. Test values were taken from a TÜV Rheinland EN 50530
+test report and must be checked against the IEC 62891 text before citing.
+
+**Adaptations, stated so they are not mistaken for compliance:** MPP voltage is moved
+with cell temperature (15 / 25 / 75 °C) rather than a PV simulator; the 300 s
+stabilisation wait is replaced by the derived time for P&O to reach the peak; the
+default profile runs the three fastest ramp slopes per sequence, one cycle each,
+because the full procedure is days of switched-model simulation. Pass marks (98 %
+static EUR-weighted, 98 % dynamic mean) are the harness's — the standard sets none.
+
+**First result (23 Sep, Belal's 19 Sep model):** dynamic passes (mean 99.2 %). Static
+fails: near 0 % at 75 °C below full power, and at 5 % power at 25 °C. Cause: P&O
+starts its voltage reference at a fixed 360 V, which is above the panel's open-circuit
+voltage on a hot or dim array; the panel is held at open circuit and the tracker never
+finds the slope down. Fix is Belal's (see `TestHarness/pv/results/iec/`).
+
+---
+
 ## Deliberately out of scope
 
 Recorded so they read as decisions rather than gaps:

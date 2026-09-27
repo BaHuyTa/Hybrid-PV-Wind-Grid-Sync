@@ -46,8 +46,9 @@ end
 
 uut   = fullfile(outDir, P.uut.model      + ".slx");
 sweep = fullfile(outDir, P.uut.sweepModel + ".slx");
+iec   = fullfile(outDir, P.uut.iecModel   + ".slx");
 
-if ~opts.Force && isfile(uut) && isfile(sweep)
+if ~opts.Force && isfile(uut) && isfile(sweep) && isfile(iec)
     s = dir(src);
     b = dir(fullfile(here, "buildPVModels.m"));
     u = dir(uut);
@@ -56,7 +57,7 @@ if ~opts.Force && isfile(uut) && isfile(sweep)
     end
 end
 
-for m = [P.uut.model, P.uut.sweepModel]
+for m = [P.uut.model, P.uut.sweepModel, P.uut.iecModel]
     if bdIsLoaded(m); close_system(m, 0); end
 end
 
@@ -107,6 +108,46 @@ if variant ~= "nominal"
 end
 
 save_system(mdl, uut);
+close_system(mdl, 0);
+
+%% pvUUT_iec -- same model, energy logged instead of waveforms
+% The standards runs are up to 1600 s of simulated time. Signal logging keeps
+% every solver step, ~70 000 a second here, which is gigabytes per run and
+% sinks the machine once runs go in parallel. What the standard needs is
+% ENERGY, and energy can be integrated inside the model and read out at any
+% rate without losing anything: the difference between two samples of the
+% integral is the exact energy in between, switching ripple included.
+% Waveforms are kept only as 1 ms samples, for plotting.
+copyfile(uut, iec, "f");
+load_system(iec);
+mdl = char(P.uut.iecModel);
+for k = 1:size(sigs, 1)
+    ph = get_param(mdl + "/" + sigs{k,1}, "PortHandles");
+    set_param(ph.Outport(sigs{k,2}), DataLogging = "off");
+end
+x0 = 40; y0 = 700;
+add_block("simulink/Math Operations/Product", [mdl '/P_panel'], Position = [x0 y0 x0+30 y0+30]);
+add_block("simulink/Continuous/Integrator",   [mdl '/E_panel'], Position = [x0+70 y0 x0+100 y0+30], ...
+          InitialCondition = "0");
+add_line(mdl, "PV Sensors/1", "P_panel/1", autorouting = "on");
+add_line(mdl, "PV Sensors/2", "P_panel/2", autorouting = "on");
+add_line(mdl, "P_panel/1",    "E_panel/1", autorouting = "on");
+taps = { "E_panel/1",         "E"  ; ...
+         "PV Sensors/2",      "Vs" ; ...
+         "MPPT Controller/1", "Ds" };
+for k = 1:size(taps, 1)
+    zoh = sprintf('%s/ZOH_%s', mdl, taps{k,2});
+    add_block("simulink/Discrete/Zero-Order Hold", zoh, SampleTime = "1e-3", ...
+              Position = [x0+160 y0+60*(k-1) x0+190 y0+60*(k-1)+30]);
+    add_line(mdl, taps{k,1}, "ZOH_" + taps{k,2} + "/1", autorouting = "on");
+    ph = get_param(zoh, "PortHandles");
+    set_param(ph.Outport, DataLogging = "on", DataLoggingNameMode = "Custom", ...
+              DataLoggingName = taps{k,2});
+    add_block("simulink/Sinks/Terminator", [zoh '_term'], ...
+              Position = [x0+230 y0+60*(k-1) x0+250 y0+60*(k-1)+20]);
+    add_line(mdl, "ZOH_" + taps{k,2} + "/1", "ZOH_" + taps{k,2} + "_term/1");
+end
+save_system(mdl, iec);
 close_system(mdl, 0);
 
 %% pvSweep -- same plant, MPPT swapped for a fixed duty

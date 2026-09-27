@@ -8,10 +8,13 @@ classdef tPVStage < matlab.unittest.TestCase
 %   one to four seconds, and the reference sweeps behind them are cached but not
 %   free the first time.
 %
-%   THIS SUITE IS CURRENTLY RED, AND THAT IS THE CORRECT STATE.
-%   The model under test is Belal's solarsimulink.slx as delivered, and it does
-%   not yet meet the interface spec in pv/pvParams.m. The failures are the
-%   report. They are deliberately NOT marked as expected failures or filtered
+%   STATUS (23 Sep 2026): green against Belal's 19 Sep model -- the stiff 700 V
+%   bus fixture and voltage-reference P&O cleared the 28 Aug failures. The
+%   standards test (runPVIEC) is where the model is now judged; this suite is
+%   regression.
+%
+%   When the model does not meet spec, this suite goes red and stays red.
+%   The failures are the report. They are deliberately NOT marked as expected failures or filtered
 %   into a known-issues list: a suite that has been taught to go green on a
 %   subsystem that will not integrate is worse than no suite, because it removes
 %   the one signal that would have stopped it reaching integration week.
@@ -181,6 +184,64 @@ classdef tPVStage < matlab.unittest.TestCase
                 "A check that does not apply must not carry a limit.");
             testCase.verifyTrue(m.checks.reacquire.pass, ...
                 "A check that does not apply must not be able to fail a run.");
+        end
+
+        function harnessIECProfilesMatchTheStandard(testCase)
+            % The dynamic profiles are generated from P.iec, so a typo there
+            % would quietly test a different procedure under the standard's
+            % name. Ramp durations are checked against the ones printed in the
+            % TUV report (Table 4.4), which were computed independently of
+            % this harness: 800 s at 0.5 W/m^2/s on A, 70 s and 7 s on B.
+            P = pvParams();
+            cases = { "iec_dyn_A_s0.5_n1", 100, 500,  800 ; ...
+                      "iec_dyn_B_s10_n1",  300, 1000, 70  ; ...
+                      "iec_dyn_B_s100_n1", 300, 1000, 7   };
+            for k = 1:size(cases, 1)
+                [g, ~, meta] = pvScenarios(cases{k,1}, P);
+                t = g.Time; d = g.Data;
+                testCase.verifyEqual([min(d) max(d)], [cases{k,2} cases{k,3}], ...
+                    cases{k,1} + ": wrong irradiance levels.");
+                up = find(d == cases{k,3}, 1) ;
+                testCase.verifyEqual(t(up) - meta.evalStart, cases{k,4}, ...
+                    cases{k,1} + ": ramp-up time does not match the standard's table.", ...
+                    AbsTol = 1e-9);
+                testCase.verifyEqual(t(up+1) - t(up), 10, ...
+                    cases{k,1} + ": dwell at the top should be 10 s.", AbsTol = 1e-9);
+            end
+        end
+
+        function harnessIECEnergyAgreesWithTracking(testCase)
+            % Two independent routes to the same number. evaluatePVSpec averages
+            % logged V*I waveforms from pvUUT; pvIECEfficiency differences an
+            % energy integral computed inside pvUUT_iec. At full sun, 25 C, both
+            % measure the same steady state against the same reference, so they
+            % must agree. When they did not, it exposed a denominator that was
+            % 1 ms short -- a 0.17 % error that read as "better than perfect".
+            [out, P, meta, ref] = runPVScenario("full_sun");
+            mW = evaluatePVSpec(out, P, meta, ref);
+            [out, P, meta] = runPVScenario("iec_static_L100_T25");
+            mE = pvIECEfficiency(out, P, meta);
+            testCase.verifyEqual(mE.etaPct, mW.trackingEffPct, ...
+                "Energy-based and waveform-based efficiency disagree at full sun.", ...
+                AbsTol = 0.05);
+        end
+
+        function harnessVstartMatchesModel(testCase)
+            % Every standards run waits for P&O to walk from its start voltage
+            % to the peak. The start voltage is a literal in Belal's function
+            % block; if he changes it, the waits are wrong and static points get
+            % measured mid-walk. This reads it back from the model.
+            buildPVModels("nominal");
+            root = fileparts(fileparts(fileparts(mfilename("fullpath"))));
+            if ~bdIsLoaded("pvUUT")
+                load_system(fullfile(root, "models", "pvUUT.slx"));
+            end
+            chart = sfroot().find("-isa", "Stateflow.EMChart", ...
+                        "Path", "pvUUT/MPPT Controller/PO MPPT");
+            tok = regexp(chart.Script, "Vref_state\s*=\s*([\d.eE+-]+)\s*;", "tokens", "once");
+            testCase.assertNotEmpty(tok, "Could not read the P&O start voltage.");
+            testCase.verifyEqual(str2double(tok{1}), pvParams().ctrl.Vstart, ...
+                "P.ctrl.Vstart no longer matches the P&O block's initial Vref.");
         end
 
         function harnessGeneratedModelsAreCurrent(testCase)

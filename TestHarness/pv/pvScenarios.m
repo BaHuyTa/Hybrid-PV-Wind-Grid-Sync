@@ -38,7 +38,17 @@ arguments
     P struct = pvParams()
 end
 
+% The standard test points are generated, not listed: 21 static points and up to
+% 18 dynamic sequences would bury the hand-written scenarios below.
+if startsWith(scenario, "iec_")
+    [irrProfile, P, meta] = pvIECScenario(scenario, P);
+    return
+end
+
 allSpecItems = ["tracking" "reacquire" "dutyRail" "ripple" "busBand" "power"];
+if P.bus.stiff
+    allSpecItems = setdiff(allSpecItems, "busBand", "stable");   % see pvParams
+end
 held         = setdiff(allSpecItems, "reacquire", "stable");
 
 meta.scenario = scenario;
