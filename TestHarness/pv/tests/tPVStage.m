@@ -252,7 +252,7 @@ classdef tPVStage < matlab.unittest.TestCase
             pvDir = fileparts(fileparts(mfilename("fullpath")));
             root  = fileparts(pvDir);
 
-            src = dir(fullfile(fileparts(root), "models", "pv", "solarsimulink.slx"));
+            src = dir(fullfile(fileparts(root), "models", "pv-v2", "solarsimulink.slx"));
             bld = dir(fullfile(pvDir, "buildPVModels.m"));
             uut = dir(fullfile(root, "models", "pvUUT.slx"));
 

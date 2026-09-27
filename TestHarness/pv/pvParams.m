@@ -24,7 +24,7 @@ end
 % Belal's file is READ ONLY as far as this harness is concerned. buildPVModels
 % copies it and instruments the copy. Editing a teammate's model in place is how
 % you end up unable to answer "did my change break it, or was it already broken?"
-P.uut.sourceModel = fullfile("..", "..", "models", "pv", "solarsimulink.slx");
+P.uut.sourceModel = fullfile("..", "..", "models", "pv-v2", "solarsimulink.slx");
 P.uut.sweepModel  = "pvSweep";   % same plant, MPPT replaced by a fixed duty
 
 %% Maximum-power reference

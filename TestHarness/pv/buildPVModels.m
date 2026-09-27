@@ -36,7 +36,7 @@ end
 here   = fileparts(mfilename("fullpath"));
 outDir = fullfile(fileparts(here), "models");
 P      = pvParams(variant);
-src    = fullfile(fileparts(fileparts(here)), "models", "pv", "solarsimulink.slx");
+src    = fullfile(fileparts(fileparts(here)), "models", "pv-v2", "solarsimulink.slx");
 
 if ~isfile(src)
     error("buildPVModels:noSource", ...
@@ -198,7 +198,7 @@ if variant == "nominal" || ~isfile(sweep)
     close_system(mdl, 0);
 end
 
-fprintf("Built %s (dV = %.2f V) from models/pv/solarsimulink.slx\n", P.uut.model, P.ctrl.dV);
+fprintf("Built %s (dV = %.2f V) from models/pv-v2/solarsimulink.slx\n", P.uut.model, P.ctrl.dV);
 end
 
 % -----------------------------------------------------------------------------
