@@ -24,7 +24,7 @@ end
 % Belal's file is READ ONLY as far as this harness is concerned. buildPVModels
 % copies it and instruments the copy. Editing a teammate's model in place is how
 % you end up unable to answer "did my change break it, or was it already broken?"
-P.uut.sourceModel = fullfile("..", "..", "models", "pv", "solarsimulink.slx");
+P.uut.sourceModel = fullfile("..", "..", "models", "pv-v2", "solarsimulink.slx");
 P.uut.sweepModel  = "pvSweep";   % same plant, MPPT replaced by a fixed duty
 
 %% Maximum-power reference
@@ -70,6 +70,9 @@ P.ctrl.variant  = variant;
 P.ctrl.Dmin     = 0.05;    % Voltage PI saturation limits
 P.ctrl.Dmax     = 0.95;
 P.ctrl.slewRate = P.ctrl.dV / P.ctrl.Ts;   % [V/s]
+P.ctrl.Vstart   = 360;     % [V] P&O's persistent Vref initial value, read from
+                           % po_mppt. Sets how long a run needs before the
+                           % tracker has walked to the peak.
 
 % dV is a literal inside the MATLAB Function block, not a tunable parameter, so
 % a variant cannot be injected at run time the way the DC-link harness injects
@@ -80,6 +83,10 @@ if variant == "nominal"
 else
     P.uut.model = "pvUUT_" + variant;
 end
+% The standards runs are minutes of simulated time. Logged at solver resolution
+% that is gigabytes per run, so they use a second copy that integrates panel
+% energy inside the model and logs it at 1 ms. See buildPVModels.
+P.uut.iecModel = P.uut.model + "_iec";
 
 %% Specification
 % --- 1. Tracking efficiency -------------------------------------------------
@@ -127,6 +134,92 @@ P.spec.busNom    = 700;         % [V] shared DC-link setpoint
 P.spec.busTolPct = 5;           % [%] envelope for the PV stage
 P.spec.busMin    = (1 - P.spec.busTolPct/100) * P.spec.busNom;
 P.spec.busMax    = (1 + P.spec.busTolPct/100) * P.spec.busNom;
+
+% --- The bus fixture ---------------------------------------------------------
+% Since 19 Sep the boost output no longer feeds a 4.08 ohm resistor. It feeds a
+% Controlled Voltage Source (DC_link) driven from a root inport, v_dc -- the
+% same pattern as Huy's windPlantSw. An undriven root inport reads ZERO, so a
+% run that forgets it tests the stage against a shorted bus, and every metric
+% comes back as nonsense that looks like an MPPT failure. pvBusInput supplies
+% it; every sim in this harness goes through that.
+%
+% It also means the bus is PINNED, so busBand would only be measuring the
+% fixture. It is withdrawn from every scenario rather than left to pass: the
+% real test of the 700 V interface is the DC-link loop, not this stage.
+P.bus.Vdc   = P.spec.busNom;    % [V] held by the ideal source
+P.bus.stiff = true;
+
+%% Standard MPPT efficiency test -- IEC 62891:2020 / EN 50530:2010+A1:2013
+% The scenarios above are regression checks the harness invented. This section
+% is the procedure the industry certifies MPPT against, so a result here can be
+% compared with a datasheet. No Australian standard covers MPPT efficiency;
+% AS/NZS 4777.2 governs the grid side only.
+%
+% SOURCE OF EVERY NUMBER BELOW: the EN 50530 test tables as tabulated in TUV
+% Rheinland report CN21VE2D 001 (EN 50530:2010+A1:2013, Tables 4.3 and 4.4,
+% Annex B). IEC 62891:2020 is the IEC counterpart of the same procedure. Check
+% the numbers against the IEC 62891 text itself before citing them.
+%
+% Neither standard sets a pass mark -- they are measurement procedures. The
+% pass marks at the end are this harness's, and they are written down here
+% BEFORE the first run, for the same reason as the rest of this file.
+
+% --- Static MPPT efficiency (EN 50530 Table 1 / report Table 4.3) -----------
+% Seven partial-power levels, each at three MPP voltages. 100 % = 1000 W/m^2
+% at 25 C (report Annex B.1), so a level in % maps straight to irradiance.
+P.iec.static.levelsPct = [5 10 20 30 50 75 100];
+% The standard sets the three voltages from the inverter's MPP window using a PV
+% simulator. This harness cannot swap Belal's array for a simulator curve, so
+% it moves the real array's MPP voltage the way nature does -- with cell
+% temperature -- across the IEC 61853-1 rating range. High V = cold, low V = hot.
+P.iec.static.tempC     = [15 25 75];            % [C]  Vmpp,max / rated / Vmpp,min
+P.iec.static.tempLabel = ["Vmpp,max (15 C)" "rated (25 C)" "Vmpp,min (75 C)"];
+% The standard logs each point for 600 s after stabilisation, because hardware
+% drifts. A simulation does not; P&O's dither repeats every few perturbations,
+% so 50 perturbations (0.5 s) is already many whole periods.
+P.iec.static.window    = 0.5;                   % [s]
+P.iec.static.settleMargin = 0.5;                % [s] PI settling after the walk
+% Weighted static efficiency. Weights exactly as the report prints them.
+P.iec.static.eurWeights = struct(levels = [5 10 20 30 50 100], ...
+                                 w      = [0.03 0.06 0.13 0.10 0.48 0.20]);
+P.iec.static.cecWeights = struct(levels = [10 20 30 50 75 100], ...
+                                 w      = [0.04 0.05 0.12 0.21 0.53 0.05]);
+
+% --- Dynamic MPPT efficiency (EN 50530 Annex B / report Table 4.4) ----------
+% Each test: hold at the low level, then ramp up at the slope, dwell, ramp down,
+% dwell -- repeated. Efficiency is ENERGY captured over the sequence divided by
+% the energy available at the MPP (EN 50530 3.4.1): a tracker that lags on the
+% ramps loses energy on every one of them, and a power snapshot cannot see that.
+seqA = struct(name = "A: 10-50 %", lowPct = 10, highPct = 50, dwell = 10, ...
+              slope = [0.5 1 2 3 5 7 10 14 20 30 50], ...   % [W/m^2/s]
+              reps  = [2   2 3 4 6 8 10 10 10 10 10]);
+seqB = struct(name = "B: 30-100 %", lowPct = 30, highPct = 100, dwell = 10, ...
+              slope = [10 14 20 30 50 100], ...
+              reps  = [10 10 10 10 10 10]);
+seqC = struct(name = "C: start-up 1-10 %", lowPct = 1, highPct = 10, dwell = 30, ...
+              slope = 0.1, reps = 1);
+P.iec.dynamic.seq = [seqA seqB seqC];
+% The standard waits 300 s before each sequence for hardware to stabilise. Here
+% the wait is DERIVED: the time P&O needs to walk from Vstart to the peak at the
+% low level, plus margin. It is excluded from the energy integral either way.
+%
+% Profiles. At ~7.7 s of wall time per simulated second, the full standard is
+% days of compute, so the default is a subset. Every profile keeps the
+% standard's levels, slopes and dwells exactly; they differ only in WHICH
+% slopes and HOW MANY repetitions.
+%   "quick"      the three fastest slopes of A and B, one cycle each. The fast
+%                ramps are where P&O fails, so this is the discriminating set.
+%   "allSlopes"  every slope of A and B, one cycle each (~3-4 h).
+%   "full"       A, B and C with the standard's repetitions (days).
+P.iec.dynamic.quickSlopes = struct(A = [20 30 50], B = [30 50 100]);
+P.iec.dynamic.refGridPct  = [1 5 10:10:100];     % denominator P_mpp(G) samples
+
+% --- Pass marks (this harness, not the standard) ----------------------------
+% 98 %, the same bar as the tracking spec above. For scale: the commercial
+% inverter in the report above measured 99.5-99.6 % static (EUR-weighted) and
+% 98.8 % / 99.7 % on dynamic sequences A / B.
+P.spec.iecStaticEurPct = 98;
+P.spec.iecDynamicPct   = 98;
 
 % --- 6. No reverse power ----------------------------------------------------
 % A PV stage sourcing negative power is drawing from the bus through the array.

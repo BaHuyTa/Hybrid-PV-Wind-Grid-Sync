@@ -34,12 +34,16 @@ arguments
     P          struct  = pvParams()
     opts.Force (1,1) logical = false
     opts.Quiet (1,1) logical = false
+    opts.T     (1,1) double  = 25       % cell temperature [C]
 end
 
 here     = fileparts(mfilename("fullpath"));
 cacheDir = fullfile(here, "results", "reference");
 if ~isfolder(cacheDir); mkdir(cacheDir); end
-cacheFile = fullfile(cacheDir, sprintf("mpp_%04d.mat", round(G)));
+% Temperature is in the name because the peak moves with it: 348 V at 25 C,
+% 290 V at 65 C. A cache keyed on irradiance alone would hand a hot run the
+% 25 C ceiling and score it against a peak it can never reach.
+cacheFile = fullfile(cacheDir, sprintf("mpp_%04d_T%02d.mat", round(G), round(opts.T)));
 
 if ~opts.Force && isfile(cacheFile)
     S = load(cacheFile, "ref");
@@ -54,12 +58,12 @@ if ~bdIsLoaded(mdl)
 end
 
 % Coarse, then fine around the winner.
-[Pc, Vc, Ic, Bc] = sweepDuty(P.sweep.Dgrid, G, P, mdl);
+[Pc, Vc, Ic, Bc] = sweepDuty(P.sweep.Dgrid, G, opts.T, P, mdl);
 [~, iBest]  = max(Pc);
 lo = max(P.ctrl.Dmin, P.sweep.Dgrid(iBest) - 0.05);
 hi = min(P.ctrl.Dmax, P.sweep.Dgrid(iBest) + 0.05);
 Dfine = lo:P.sweep.refineDD:hi;
-[Pf, Vf, If, Bf] = sweepDuty(Dfine, G, P, mdl);
+[Pf, Vf, If, Bf] = sweepDuty(Dfine, G, opts.T, P, mdl);
 
 D = [P.sweep.Dgrid, Dfine];
 Pp = [Pc, Pf]; Vv = [Vc, Vf]; Ii = [Ic, If]; Bb = [Bc, Bf];
@@ -76,6 +80,7 @@ ref.Pgrid = Pp;
 ref.Vgrid = Vv;
 ref.Bgrid = Bb;
 ref.G     = G;
+ref.T     = opts.T;
 
 % On the rail, within one refinement step.
 ref.reachable = ref.Dmpp > P.ctrl.Dmin + P.sweep.refineDD && ...
@@ -87,25 +92,35 @@ if ~opts.Quiet
     if ~ref.reachable
         rail = "   <- ON THE DUTY RAIL: the panel optimum is out of reach";
     end
-    fprintf("  reference @ %4d W/m^2 : Pmax %7.1f W at D = %.3f%s" + newline, ...
-            G, ref.Pmax, ref.Dmpp, rail);
+    fprintf("  reference @ %4d W/m^2, %2d C : Pmax %7.1f W at %5.1f V, D = %.3f%s" + newline, ...
+            G, round(opts.T), ref.Pmax, ref.Vpv, ref.Dmpp, rail);
 end
 end
 
 % -----------------------------------------------------------------------------
-function [Pavg, Vavg, Iavg, Bavg] = sweepDuty(Dgrid, G, P, mdl)
+function [Pavg, Vavg, Iavg, Bavg] = sweepDuty(Dgrid, G, T, P, mdl)
 %SWEEPDUTY Steady-state operating point at each fixed duty.
+%   Runs the points in parallel when a pool is already open, serially when not.
+%   The harness never opens a pool itself: that is the caller's decision, and a
+%   test suite that silently spins up workers is a test suite nobody can run on
+%   a laptop.
 irr  = timeseries([G; G], [0; P.sweep.stopTime]);
 n    = numel(Dgrid);
 Pavg = nan(1, n); Vavg = Pavg; Iavg = Pavg; Bavg = Pavg;
 
+si = repmat(Simulink.SimulationInput(mdl), 1, n);
 for k = 1:n
-    si = Simulink.SimulationInput(mdl);
-    si = si.setModelParameter(StopTime = num2str(P.sweep.stopTime));
-    si = si.setVariable("irrProfile", irr);
-    si = si.setVariable("D_fix", Dgrid(k));
-    o  = sim(si);
+    si(k) = Simulink.SimulationInput(mdl);
+    si(k) = si(k).setModelParameter(StopTime = num2str(P.sweep.stopTime));
+    si(k) = si(k).setVariable("irrProfile", irr);
+    si(k) = si(k).setVariable("D_fix", Dgrid(k));
+    si(k) = si(k).setBlockParameter(mdl + "/Solar Panel", "CellTempC", num2str(T));
+    si(k) = pvBusInput(si(k), P, P.sweep.stopTime);
+end
+outs = pvRunMany(si);
 
+for k = 1:n
+    o = outs(k);
     L = o.logsout;
     V = L.getElement("V").Values;
     I = L.getElement("I").Values;
@@ -114,10 +129,17 @@ for k = 1:n
     % Average over the tail only. The first samples are the Simscape start-up
     % transient, and averaging those in would drag every point low by a
     % different amount, tilting the whole curve and moving the reported peak.
-    m = V.Time > (P.sweep.stopTime - P.sweep.avgWindow);
-    Vavg(k) = mean(V.Data(m));
-    Iavg(k) = mean(I.Data(m));
-    Pavg(k) = mean(V.Data(m) .* I.Data(m));
-    Bavg(k) = mean(B.Data(m));
+    %
+    % Time-weighted, not mean(): the solver crowds its steps around switching
+    % edges, so a plain mean over-weights those instants. Measured at 1000 W/m^2
+    % the difference is under 0.001 %, but this is the same time average the
+    % energy-based IEC metric divides by, and the two should not differ in kind.
+    m  = V.Time > (P.sweep.stopTime - P.sweep.avgWindow);
+    tw = V.Time(m);
+    avg = @(x) trapz(tw, x) / (tw(end) - tw(1));
+    Vavg(k) = avg(V.Data(m));
+    Iavg(k) = avg(I.Data(m));
+    Pavg(k) = avg(V.Data(m) .* I.Data(m));
+    Bavg(k) = avg(interp1(B.Time, B.Data, tw));
 end
 end

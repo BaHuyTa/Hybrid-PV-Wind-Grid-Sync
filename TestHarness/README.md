@@ -106,8 +106,22 @@ edited can no longer answer "was it already broken?"
 setupHarness
 runPVAll                        % all six irradiance scenarios
 runPVAll(Variant = "fastPO")    % the candidate fix: 5x P&O perturbation size
-runtests("tPVStage")            % 5 harness self-tests + 6 spec tests
+runtests("tPVStage")            % 8 harness self-tests + 6 spec tests
+
+parpool(2)                      % optional; ~1.5 GB per Simscape worker
+runPVIEC                        % IEC 62891 / EN 50530 MPPT efficiency (~1 h)
+runPVIEC(Profile = "allSlopes") % every ramp slope, one cycle (~3-4 h)
 ```
+
+`runPVAll` is the harness's own regression suite. `runPVIEC` is the standard
+procedure the industry certifies MPPT against: static efficiency at 7 power
+levels x 3 MPP voltages (EUR- and CEC-weighted), and dynamic efficiency on the
+standard's irradiance ramps, both measured as **energy** captured over energy
+available. No Australian standard covers MPPT efficiency; AS/NZS 4777.2 is the
+grid side only. The numbers in `P.iec` come from the EN 50530 tables in a TUV
+Rheinland test report — check them against the IEC 62891 text before citing.
+The MPP voltage is moved with cell temperature (15 / 25 / 75 C) rather than a PV
+simulator, since the array is Belal's to change. Results go to `pv/results/iec/`.
 
 | Path | Role |
 |---|---|
@@ -117,6 +131,12 @@ runtests("tPVStage")            % 5 harness self-tests + 6 spec tests
 | `pv/pvScenarios.m` | Six irradiance profiles + which requirements apply to each |
 | `pv/evaluatePVSpec.m` | Metrics and verdicts |
 | `pv/runPVAll.m` | Verdict table + findings written as sentences |
+| `pv/pvSimInput.m` | The one SimulationInput for any named scenario |
+| `pv/pvBusInput.m` | Drives the `v_dc` inport that holds the 700 V bus fixture |
+| `pv/pvRunMany.m` | Runs an array of inputs — `parsim` if a pool is open |
+| `pv/pvIECScenario.m` | Generates the standard's static points and ramp profiles |
+| `pv/pvIECEfficiency.m` | Energy-based MPPT efficiency (EN 50530 3.4.1) |
+| `pv/runPVIEC.m` | Standards run, report tables and figure |
 | `pv/tests/tPVStage.m` | The suite |
 
 Three things had to be solved before the model could be tested at all, and they
@@ -133,7 +153,8 @@ are the reusable lesson rather than PV specifics:
    is the same plant with P&O replaced by a fixed duty; sweeping it gives the
    best power the hardware could deliver if the controller were perfect.
 
-> **`runtests("tPVStage")` is currently red on `meetsSpec`, and that is correct.**
-> The delivered model does not meet the interface spec. The failures are the
-> report. The five `harness*` tests are the ones that must stay green — if they
-> fail, nothing the spec tests say can be trusted. Fix those first.
+> **`runtests("tPVStage")` is green against Belal's 19 Sep model.** It was red
+> on the 3 Sep model, and briefly red again on 23 Sep for a harness reason: his
+> new 700 V bus source is fed from a root inport (`v_dc`) the harness was not
+> driving, so every run saw a 0 V bus. The `harness*` tests are the ones that
+> must stay green — if they fail, nothing the spec tests say can be trusted.
