@@ -43,6 +43,15 @@ pp.cf0      = 0.05;                   % base chopping factor
 pp.kSFS     = 0.05;                   % rad/Hz positive-feedback gain
 pp.kSFS_min = 4*pp.Qf/(pi*pp.f_n);    % analytical floor, for reference
 
+%   Chopping factor is bounded. Under runaway feedback it would otherwise
+%   grow without limit, and cf = 1 corresponds to a quarter-cycle advance
+%   beyond which the shift is no longer a perturbation and real power
+%   export collapses. +-0.5 bounds the commanded advance to +-45 deg.
+%   It never engages in normal operation (cf = cf0 = 0.05) nor during a
+%   normal runaway: at the estimator's own +-5 Hz clamp, cf reaches 0.30.
+%   So if this limit is ever active, something upstream is wrong.
+pp.cf_max   = 0.5;                    % |cf| bound
+
 % --- LCL filter capacitance seen at the PCC ------------------------------
 %   The inverter's output filter capacitor sits electrically at the PCC and
 %   is part of the load the island sees. The standard specifies the TOTAL
