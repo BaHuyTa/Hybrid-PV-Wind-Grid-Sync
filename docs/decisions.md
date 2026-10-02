@@ -133,6 +133,33 @@ finds the slope down. Fix is Belal's (see `TestHarness/pv/results/iec/`).
 
 ---
 
+## 2026-10-02 — Integration: shared 700 V bus with stand-in DC-link loop and PLL
+
+**Decided.** `models/integration/` joins PV (pv-v2), wind and the inverter on one 700 V
+bus, modelled as `C·dv/dt = i_pv + i_wind − i_inv` with C = 44 mF. Each component takes
+`v_dc` in and gives its DC current out. Two stand-ins fill the gaps until the real blocks
+fit: a DC-link voltage PI that commands the inverter's `Id_ref`, and an SRF-PLL in place of
+`GridAngle_ideal`. Aqib's `SRF_PLL` is already a drop-in and runs in `intSystem_aqibPLL.slx`.
+
+**DC-link gains: P 18.714, I 18.714 × 94.79 = 1774** (A pk per V), clamp ±306.2 A with
+anti-windup. Tuned by Henry in Control System Designer on the plant
+`1/(1.429·0.044·s) · 1/(s/3142 + 1)` (bus + current loop, in the block's d-axis units):
+crossover 310 rad/s, 10× below the 500 Hz current loop; phase margin 67°. They replace the
+harness gains (12.57 / 251.5): bus deviation 2.14 → 1.21 %, recovery 60 → 12 ms, THD
+unchanged.
+
+**Why a signal-level bus and not a Simscape capacitor.** PV's negative rail is grounded
+and the grid has a neutral; a physical capacitor joining them closes a DC short.
+
+**Result (2 Oct):** nominal, cloud, gust and weak grid pass every success criterion;
+`checkBuild` 44/44. Over-rating fails by design of the scenario: nothing curtails PV + wind
+above 150 kVA. Numbers and figures: `models/integration/results/RESULTS.md`.
+
+**Open:** curtailment (team), weak-grid PLL frequency ripple and the `SRF_PLL` start angle
+(Aqib), PV diode Ron (Belal), Aqib's DC-link loop still drives a battery (Aqib).
+
+---
+
 ## Deliberately out of scope
 
 Recorded so they read as decisions rather than gaps:

@@ -26,6 +26,7 @@ html/
 results/*.mat
 **/results/*.csv
 **/results/*.png
+models/integration/results/**/*.mat
 *.fig
 
 # MATLAB session
