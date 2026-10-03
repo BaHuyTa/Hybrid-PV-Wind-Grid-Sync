@@ -63,8 +63,8 @@ saturates. Fix in his block: start at −π/2.
   frequency protection. Aqib's 300 Hz notch halves it; the 150 Hz part remains. A 20 ms moving
   average on f̂ before any trip, or a slower PLL (10 Hz still re-locks in ~65 ms). Owner: Aqib.
 - **C. PV diode D1 Ron = 0.3 Ω** costs about 13 kW. Owner: Belal.
-- **D. Aqib's own DC-link loop drives a battery current source**, not the inverter's
-  `Id_ref`, so it can't replace the stand-in yet. Owner: Aqib.
+- **D. Closed (2 Oct).** Aqib's DC-link loop drives a battery current source, and the system
+  has no battery, so the system keeps this folder's DC-link loop. Aqib's `SRF_PLL` is the PLL.
 
 ## Figures (stand-in PLL)
 

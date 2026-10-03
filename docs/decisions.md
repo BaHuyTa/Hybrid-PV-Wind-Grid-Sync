@@ -155,8 +155,13 @@ and the grid has a neutral; a physical capacitor joining them closes a DC short.
 `checkBuild` 44/44. Over-rating fails by design of the scenario: nothing curtails PV + wind
 above 150 kVA. Numbers and figures: `models/integration/results/RESULTS.md`.
 
+**Which blocks the system keeps (Henry, 2 Oct):** the **DC-link voltage loop is this one**
+(`DCLinkLoop_standin`, Henry's gains), not Aqib's: his drives a battery current source, and
+the system has no battery (see out of scope). The **PLL is Aqib's `SRF_PLL`**; the PLL
+stand-in stays only until his block starts at −π/2.
+
 **Open:** curtailment (team), weak-grid PLL frequency ripple and the `SRF_PLL` start angle
-(Aqib), PV diode Ron (Belal), Aqib's DC-link loop still drives a battery (Aqib).
+(Aqib), PV diode Ron (Belal).
 
 ---
 
