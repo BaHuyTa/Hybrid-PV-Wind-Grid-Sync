@@ -21,6 +21,7 @@ item still open is the three-phase interface; see [Remaining](#remaining).
 | `make_fig5.m` | regenerates fig5, the SFS on/off comparison — the headline SC5 evidence |
 | `ndz_sweep.m` | runs the (ΔQ × Qf) sweep into `results/ndz_sweep.mat` |
 | `ndz_plot.m` | draws fig6, the non-detection zone, from that `.mat` |
+| `design-record.md` | **every design choice, its justification and its source** — written for assembling the report |
 
 ```matlab
 addpath(genpath('models'));
