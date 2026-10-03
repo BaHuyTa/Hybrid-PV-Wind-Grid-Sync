@@ -3,9 +3,11 @@
 Owner: S M Redhwan Ahmed · criterion **SC5** (islanding detected and disconnected
 within 2 s), `docs/traceability.md`
 
-**Status: rig built and verified, detection not yet closed.** The circuit, the test
-load and the SFS control law are in place and behave correctly. The positive-feedback
-loop is not yet closed — see [Remaining](#remaining).
+**Status: SC5 met in the single-phase equivalent.** The detection chain is closed and
+measured. At the test condition the standard specifies — matched RLC load, Qf = 1 —
+Sandia Frequency Shift detects the island and disconnects in **98 ms** against a 2 s
+budget, and the non-detection zone is empty across ±50% reactive mismatch. The one
+item still open is the three-phase interface; see [Remaining](#remaining).
 
 ## Files
 
@@ -13,19 +15,134 @@ loop is not yet closed — see [Remaining](#remaining).
 |---|---|
 | `protectionParams.m` | single source of truth — every rating derives from `pp.S_plant` |
 | `rlcTestLoad.m` | (ΔP, ΔQ) → R, L, C for the NDZ sweep, holding Qf constant |
-| `SFS_test1.slx` | single-phase islanding rig: inverter, RLC test load, grid, breaker |
-| `protection_figures.m` | regenerates the evidence figures into `results/` |
+| `SFS.slx` | **the rig** — inverter, RLC test load, grid, breaker, estimator, trip logic |
+| `SFS_test1.slx` | predecessor, kept as the verified record behind the Week 7–8 figures |
+| `protection_figures.m` | regenerates fig1–fig4 (phase reset, spectrum, island event, frequency) |
+| `make_fig5.m` | regenerates fig5, the SFS on/off comparison — the headline SC5 evidence |
+| `ndz_sweep.m` | runs the (ΔQ × Qf) sweep into `results/ndz_sweep.mat` |
+| `ndz_plot.m` | draws fig6, the non-detection zone, from that `.mat` |
 
 ```matlab
 addpath(genpath('models'));
 pp = protectionParams();     % parameters only, no Simulink
-protection_figures           % runs the model, writes three figures
+protection_figures           % fig1-fig4
+make_fig5                    % fig5  - the SC5 headline
+ndz_sweep(1:2); ndz_plot     % fig6  - run the sweep in chunks, see below
 ```
+
+## How detection works
+
+Five stages, each of which has to be present for the next to mean anything.
+
+**1. The perturbation.** SFS advances the phase of the injected current relative to the
+measured voltage by a *chopping factor* `cf`, where the advance is `θ = (π/2)·cf`. So
+`cf` is the fraction of a quarter-cycle: `cf = 0.05` is 4.5°. Grid-connected this does
+nothing observable, because the grid holds the frequency and simply absorbs the small
+phase error. That is the point — the scheme must be invisible until the grid goes away.
+
+**2. The positive feedback.** `cf = cf0 + kSFS·Δf`, where `Δf` is the measured
+departure from 50 Hz. Once islanded, the phase advance pushes the frequency, the
+frequency increase raises `cf`, and the larger `cf` pushes harder. The loop runs away.
+
+**3. Why the load cannot stop it.** A parallel RLC load supplies phase
+`θ_load(f) = arctan[Qf·(f/f_res − f_res/f)]`. Near resonance its slope is `2Qf/f₀`
+rad/Hz. The SFS demand grows at `(π/2)·kSFS` rad/Hz. Detection requires the demand to
+outgrow the supply:
+
+```
+kSFS > 4*Qf/(pi*f_n)       = 0.0255 at Qf = 1, f_n = 50 Hz
+pp.kSFS = 0.05             ~2x margin
+```
+
+Below that ratio the two curves cross and the frequency settles at an equilibrium
+instead of running away. **The gain condition is the runaway threshold, not the
+detection limit** — see the sweep result below, which measures the difference.
+
+**4. The estimate.** `FreqEstimator` recovers frequency at the PCC per cycle: zero
+cross → period measure (triggered, clock minus unit delay) → reciprocal → clamp to
+45–55 Hz. Without it `Δf` is identically zero and stage 2 never engages. It is a
+standalone estimator because the SRF-PLL on the control branch is still a stub
+(`GridAngle_ideal`).
+
+**5. The relay.** `TripLogic` compares the estimate against 47 / 52 Hz, ORs the two,
+and latches. `TripGate` forces the current reference to zero. The gate sits *before*
+`ctrl_delay`, not after, or it closes an algebraic loop.
+
+## Results
+
+### SC5 — detection at the standard test condition
+
+| quantity | value |
+|---|---|
+| detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **98.0 ms** |
+| criterion | 2.0 s |
+| margin | 20× |
+| PCC voltage change on islanding | **−2.72%** |
+| current THD at rated output | 0.60% |
+| fundamental | 306.23 A pk against `pp.Ipvmax` = 306.19 A |
+
+The −2.72% voltage change is why this needs an active scheme. The matched load draws
+almost exactly what the inverter supplies, so nothing moves far enough for
+under/over-voltage protection to see it. `fig5` shows the same case with SFS disabled:
+the frequency settles and never trips.
+
+### The non-detection zone
+
+77 points, ΔQ ∈ [−0.5, +0.5] in 11 steps × Qf ∈ {0.5 … 3.5} in 7 steps. 72 detected,
+5 not. Detection times 18.4–591.5 ms.
+
+| Qf | detected | detection time |
+|---|---|---|
+| 0.5 | 11/11 | 18.4–97.2 ms |
+| **1.0** | **11/11** | **18.5–98.0 ms** |
+| 1.5 | 11/11 | 18.6–137.1 ms |
+| 2.0 | 11/11 | 18.7–234.8 ms |
+| 2.5 | 10/11 | 18.8–291.7 ms |
+| 3.0 | 9/11 | 18.9–125.5 ms |
+| 3.5 | 9/11 | 19.0–591.5 ms |
+
+**At Qf = 1 the non-detection zone is empty** across the full ±50% reactive range. All
+five failures sit at Qf ≥ 2.5 and at ΔQ of 0 or −0.1 — the detuning that most nearly
+cancels the phase SFS demands.
+
+**ΔP is deliberately not swept.** `θ_load` depends only on Qf and the ratio `f/f_res`,
+so real-power mismatch moves the resistance and therefore the voltage, but leaves the
+resonant frequency and the phase slope untouched. It cannot affect frequency-based
+detection. Sweeping it would have produced 121 points of which 110 were redundant.
+
+### Why failure begins near Qf ≈ 2, not at the gain condition
+
+The analytical threshold `Qf_crit = kSFS*pi*f_n/4 = 1.96` marks where *runaway* stops,
+not where *detection* stops. Above it the frequency still travels — toward an
+equilibrium rather than without bound — and trips whenever that journey crosses a
+threshold in time. With `df_eq = (pi/2)*cf0 / [(2*Qf/f0) − (pi/2)*kSFS]`:
+
+| Qf | denominator | f_eq | outcome |
+|---|---|---|---|
+| 1.0 | −0.0385 | none | no equilibrium — runaway, detected |
+| 1.5 | −0.0185 | none | no equilibrium — runaway, detected |
+| 2.0 | +0.0015 | 103.8 Hz | equilibrium exists but is far outside the band — detected |
+| 2.5 | +0.0215 | 53.7 Hz | past 52 Hz, but not reached within 2 s — **temporal failure** |
+| 3.0 | +0.0415 | 51.9 Hz | lands inside 47–52 — **geometric failure** |
+| 3.5 | +0.0615 | 51.3 Hz | lands inside 47–52 — **geometric failure** |
+
+A negative denominator means no solution exists: SFS outgrows the load at every
+frequency. That is the regime Qf = 1 is in, and it is why the test condition the
+standard specifies is comfortable rather than marginal. **Qf = 1 does not produce a
+useful equilibrium — it produces none, which is better.**
+
+So there are two distinct failure modes, and they are not interchangeable. Raising
+`kSFS` cures the geometric one by pushing the equilibrium out of the band; it cures
+the temporal one only incidentally, by making the approach faster.
 
 ## Single-phase equivalent
 
 The model is **one phase of the three-phase plant**, so the 150 kVA nameplate is
 divided by three. Using the plant rating directly would overstate current by 3×.
+
+This is exact rather than approximate for a balanced three-phase system, and the NDZ
+result transfers without rescaling: every axis is a normalised ratio (ΔQ per unit of
+`P_inv`, and Qf, which is dimensionless), so the factor of three cancels in both.
 
 Shared quantities are cross-checked against `models/inverter/invParams.m` and agree
 by construction, not by coincidence:
@@ -39,94 +156,74 @@ by construction, not by coincidence:
 
 ## The test load, and why the site load is absent
 
-The islanding test uses the **RLC test load alone**, matched to inverter output and
-resonant at 50 Hz with Qf = 1. The 250 kW site load is deliberately **not** connected.
+`rlcTestLoad.m` builds a parallel RLC resonant at 50 Hz with quality factor Qf,
+matched to the inverter output. The LCL filter capacitor `pp.Cf` sits electrically at
+the PCC and is part of what the island sees, so the bank carries `C_tot − Cf` rather
+than ignoring it.
 
-That is not an oversight. With 250 kW of demand against 150 kVA of generation, opening
-the breaker leaves a 100 kW deficit; the PCC voltage collapses to roughly 60–77 % of
-nominal within a cycle and plain undervoltage protection trips immediately. The test
-would pass while proving nothing, because the anti-islanding scheme never has to act.
+The 250 kW site load is **disconnected** during the islanding test. With it present
+the island has a large power deficit, the voltage collapses, and undervoltage
+protection detects the island trivially — which would prove nothing about SFS. The
+matched load is the worst case, and it is the case the standard specifies.
 
-The non-detection zone exists precisely where generation ≈ load, so that opening the
-breaker changes nothing measurable. That is the case the standard specifies, and the
-only one worth measuring. `docs/traceability.md` currently reads as though both loads
-are present for SC5 — that wording needs settling with integration.
+The inductor is given an initial current (`pp.iL0`). A lossless inductor energised at
+t = 0 keeps its startup DC component forever, because nothing in that branch
+dissipates it. The fix is the initial condition and **not** winding resistance, which
+would remove the offset equally but reduce Qf and so invalidate the test load the
+whole NDZ analysis rests on.
 
-The inverter's LCL filter capacitor sits electrically at the PCC and is part of what
-the island sees, so the RLC bank is trimmed by `pp.Cf` and bank + filter together
-give the resonance the standard requires.
+## Running the sweep
 
-## Modelling decisions
+A point that fails runs the full stop time and is roughly ten times slower than one
+that trips early, so the full 77-point sweep takes the best part of an hour. It
+checkpoints after every point and takes a row index, so run it in chunks:
 
-**The inverter is a controlled current source, not a switching bridge.** Justified by
-bandwidth separation: the measured current loop settles in 1.20 ms
-(`inv_current_loop_check`) against islanding dynamics of hundreds of milliseconds, so
-the loop is effectively instantaneous at this timescale. Same reasoning the team uses
-to justify tuning the cascade inside-out.
+```matlab
+ndz_sweep(1:2)     % Qf = 0.5, 1.0
+ndz_sweep(3:4)     % resumes, appends
+ndz_plot           % draws whatever is complete, warns if not all
+```
 
-**One control-cycle delay on the current reference.** Without it the injected current
-and the PCC voltage it produces form an algebraic loop. The delay is not a numerical
-patch — a real DSP samples, computes, and applies on the following cycle. The
-inverter branch's `CurrentLoop` uses the same one-sample delay for the same reason.
-
-**The breaker interrupts immediately, not at current zero.** `zeroCrossingEnable`
-waits for current within `i_th` = 1e-8 A, which the solver never samples — the
-internal state flips while current keeps flowing. Immediate interruption also makes
-the island instant exactly `pp.t_island`, so detection time is measured from a
-defined origin.
-
-**The test-load inductor starts in steady state** (`pp.iL0`). A lossless inductor
-energised at t = 0 keeps its startup DC component forever. Adding winding resistance
-would remove it but also add loss to the reactive branch, changing Qf and
-invalidating the test load — so the initial current is set instead.
-
-**Foundation Simscape Electrical only.** Specialized Power Systems is not installed,
-so there is no `powergui`, no three-phase source/breaker/RLC blocks, and no FFT
-Analysis tool. Harmonic analysis is done in code.
-
-## Verified
-
-Grid-connected steady state, and the island at `pp.t_island` = 1.0 s:
-
-| | value | |
-|---|---|---|
-| inverter current peak | 306.15 A | matches `pp.Ipvmax` |
-| PCC voltage, grid-connected | 230.84 V rms | vs 230.94 nominal |
-| grid current DC component | −0.00 A | inductor initial condition holds |
-| grid current after island | 0.000 A | breaker isolates cleanly |
-| injected current THD | 0.48 % | measured on uniformly resampled data |
-| phase reference | resets every 19.96 ms | locked to PCC zero crossings |
-| PCC frequency, islanded | 50.20 Hz | shifted off resonance by the SFS phase |
-
-That last row is the mechanism working: with the phase reference locked, the SFS phase
-advance forces the island off resonance. It settles rather than running away because
-the feedback path is still open.
+Changing `dQ_grid` or `Qf_grid` is refused against stored results — delete
+`results/ndz_sweep.mat` first, deliberately.
 
 ## Remaining
 
-1. **`fpcc` is a constant placeholder.** Δf is therefore always zero and `cf` never
-   leaves `cf0`, so there is no positive feedback. A frequency estimate at the PCC
-   closes the loop. Aqib's SRF-PLL is still a stub (`GridAngle_ideal`), so this needs
-   a standalone estimator for now.
-2. **Trip logic does not exist.** Over/under-frequency comparison, a latch, and
-   forcing the current reference to zero.
-3. **Saturate `cf`** — under runaway feedback it grows without bound, and a phase
-   advance beyond π/2 is meaningless.
-4. **NDZ sweep** — `rlcTestLoad.m` is written and verified; the sweep over (ΔP, ΔQ)
-   is the SC5 deliverable.
-5. **Three-phase.** Possibly moot: in a dq-frame controller SFS enters as an angle
-   offset or a quadrature-current injection, not as a generated waveform. The
-   inverter README lists **"Who owns `Iq_ref`?"** as unassigned — that is this
-   interface, and it should be claimed.
+1. **Three-phase interface.** Everything above is the single-phase equivalent. In the
+   dq-frame controller SFS enters as a quadrature-current reference,
+   `Iq_ref = Id_ref*tan(theta)`, not as a generated waveform. The inverter README
+   lists **"Who owns `Iq_ref`?"** as unassigned — that is this interface, and it needs
+   claiming before SC5 can be demonstrated on the full plant.
+2. **Automatic reconnection.** AS/NZS 4777.2 requires reconnection once voltage and
+   frequency have been within range for a sustained period. The latch is currently
+   permanent, so the rig disconnects and stays disconnected. Scope confirmation
+   pending with the product owner.
+3. **Verification against the standards**, all flagged in the source:
+   - 47 / 52 Hz thresholds against the AS/NZS 4777.2 table — currently asserted
+   - the gain condition against IEEE 1547.1 — note that the sweep independently
+     measures the runaway boundary between Qf 2.0 and 2.5 against a predicted 1.96
+   - whether the frequency drift rate scales with `pp.Ts`, which would make 98 ms
+     partly an artefact of the 10 kHz control rate
+   - SC5 test wording with Hoang — integration owns whether the site load is present
 
 ## Design notes
-
-**Gain floor.** Detection needs the SFS phase-frequency slope to exceed the load's:
-`kSFS > 4·Qf/(π·f_n)`, which is 0.0255 at Qf = 1 and 50 Hz. `pp.kSFS` = 0.05 gives
-roughly 2× margin. Verify the derivation against IEEE 1547.1 before it goes in a
-report.
 
 **Drive frequency up, not down.** The trip thresholds are asymmetric — 52 Hz is 2 Hz
 above nominal, 47 Hz is 3 Hz below — so an upward drift reaches its threshold about a
 third sooner. A positive `cf0` is therefore the better choice for detection speed.
-Confirm both thresholds against the AS/NZS 4777.2 table; they are currently unverified.
+
+**Chopping factor is bounded** at `pp.cf_max` = 0.5, i.e. ±45°. Under runaway it would
+otherwise grow without limit, and beyond a quarter-cycle the shift stops being a
+perturbation and real power export collapses. It never engages in normal operation
+(`cf` = `cf0` = 0.05) nor during a normal runaway (`cf` reaches 0.30 at the ±5 Hz
+clamp inside the estimator), so if this limit is ever active something upstream is
+wrong.
+
+**One control-cycle delay is load-bearing.** `ctrl_delay` applies the SFS current
+reference one cycle after the voltage that produced it, as a real DSP would. Without
+it the injected current and the PCC voltage it produces form an algebraic loop.
+
+**Figures are theme-proof by construction.** Every figure script sets colours
+explicitly, builds the figure invisible with `InvertHardcopy` off, and exports on a
+white background. Do **not** add a call to `theme()` — it can block the session for
+the full timeout when driven non-interactively.
