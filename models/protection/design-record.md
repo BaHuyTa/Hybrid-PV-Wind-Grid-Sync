@@ -187,29 +187,63 @@ and never trips (`fig5`, left trace).
 
 ### Non-detection zone
 
-> **These times predate the pickup delay** (added 2026-10-04) and are each short by
-> `t_pickup` = 100 ms. The detected/not-detected split is not expected to change — the
-> slowest detected case was 591.5 ms, so +100 ms leaves it far short of 2 s, and a
-> persistence delay can only ever slow detection, never enable it. **That reasoning is
-> not yet verified by measurement — re-run `ndz_sweep` before quoting these in the
-> report.** The earlier run is kept at `results/ndz_sweep_PRE_PICKUP_DELAY.mat`.
+Re-run 2026-10-04 with the blocking and persistence delays in place. 77 points:
+ΔQ ∈ [−0.5, +0.5] × 11, Qf ∈ {0.5 … 3.5} × 7. **71 detected, 6 not.** Detection times
+118.5–391.8 ms.
 
-77 points: ΔQ ∈ [−0.5, +0.5] × 11, Qf ∈ {0.5 … 3.5} × 7. **72 detected, 5 not.** Detection
-times 18.4–591.5 ms.
+> **A prediction recorded here was wrong, and is corrected.** Before re-running, this
+> document said the detected/not-detected split was "not expected to change", on the
+> grounds that a persistence delay can only slow detection and the slowest detected case
+> had 1.4 s of headroom. The first half is true; the conclusion did not follow. **One
+> case was lost: Qf = 3.5, ΔQ = −0.2**, previously detected at 591.5 ms. The reasoning
+> failed because a persistence delay does not merely add time — it changes *which*
+> conditions are detectable at all. See "Why that case was lost" below. The earlier run
+> is kept at `results/ndz_sweep_PRE_PICKUP_DELAY.mat`.
 
-| Qf | detected | detection time |
-|---|---|---|
-| 0.5 | 11/11 | 18.4–97.2 ms |
-| **1.0** | **11/11** | **18.5–98.0 ms** |
-| 1.5 | 11/11 | 18.6–137.1 ms |
-| 2.0 | 11/11 | 18.7–234.8 ms |
-| 2.5 | 10/11 | 18.8–291.7 ms |
-| 3.0 | 9/11 | 18.9–125.5 ms |
-| 3.5 | 9/11 | 19.0–591.5 ms |
+| Qf | detected | detection time | was |
+|---|---|---|---|
+| 0.5 | 11/11 | 118.6–197.4 ms | 11/11 |
+| **1.0** | **11/11** | **118.5–198.1 ms** | 11/11 |
+| 1.5 | 11/11 | 118.7–237.1 ms | 11/11 |
+| 2.0 | 11/11 | 118.8–334.9 ms | 11/11 |
+| 2.5 | 10/11 | 118.9–391.8 ms | 10/11 |
+| 3.0 | 9/11 | 119.0–226.3 ms | 9/11 |
+| 3.5 | **8/11** | 119.1–255.4 ms | 9/11 |
 
-**At the standard's Qf = 1 the non-detection zone is empty** across the full ±50% reactive
-range. All five failures sit at Qf ≥ 2.5 and at ΔQ of 0 or −0.1 — the detuning that most
-nearly cancels the phase SFS demands.
+**At the standard's Qf = 1 the non-detection zone is still empty** across the full ±50%
+reactive range, so SC5 is unaffected. All six failures sit at Qf ≥ 2.5, well above the
+test condition, and at ΔQ between −0.2 and 0 — the detuning that most nearly cancels the
+phase SFS demands.
+
+### Why that case was lost
+
+Qf = 3.5, ΔQ = −0.2 does not run away at all. The frequency falls rather than rises
+(ending at 46.98 Hz, never exceeding 50.00) and then **oscillates**, dipping below the
+47 Hz threshold repeatedly:
+
+```
+excursions below 47 Hz, after the island at t = 1.0 s
+  1.592 - 1.677 s    85.1 ms
+  1.931 - 2.017 s    85.1 ms
+  2.271 - 2.357 s    85.1 ms
+  2.611 - 2.697 s    85.1 ms
+```
+
+A limit cycle: period ~340 ms, each excursion 85.1 ms. The old relay latched on the
+first dip at t = 1.592 s, which is exactly the 591.5 ms previously recorded. The new
+relay requires 100 ms of continuous out-of-band time, and each dip is 85.1 ms, so it
+never confirms.
+
+**This is the relay behaving correctly, not a regression.** Tripping on an 85 ms dip in
+an oscillation is precisely what a persistence delay exists to prevent, and the same
+behaviour is what stops a 30° phase jump tripping the plant. But it is an honest cost:
+the non-detection zone is marginally larger than it was.
+
+The case is also highly sensitive to the setting — 85.1 ms against a 100 ms pickup. A
+`t_pickup` of 0.05 s would recover it and give a 148 ms headline, while still clearing
+the worst measured disturbance (20.7 ms at 60°) by 2.4×. 0.1 s was chosen for the larger
+disturbance margin. **The trade is one parameter and is worth stating in the report
+rather than hiding.**
 
 ---
 
@@ -220,7 +254,7 @@ nearly cancels the phase SFS demands.
 | **Qf = 1 numeric value** | **asserted** — confirm against the full AS/NZS IEC 62116:2020 text (#7) |
 | **Gain condition vs IEEE 1547.1** | **asserted** — the formula `kSFS > 4Qf/(πf_n)` is used throughout; confirm the derivation. Note the sweep independently corroborates it (§5) |
 | **Frequency thresholds vs the standard itself** | **verified** against a network operator document; confirm against AS/NZS 4777.2:2020 Table 4.1/4.2 directly |
-| **Re-run the NDZ sweep** | required — every stored detection time predates `t_pickup`. ~1 hour, chunkable |
+| **Re-run the NDZ sweep** | **done 2026-10-04** — 71/77 detected, one case lost at Qf = 3.5 |
 | **Does drift rate scale with `pp.Ts`?** | unchecked. If it does, 98 ms is partly an artefact of the 10 kHz control rate. Testable: re-run `make_fig5` at `pp.Ts` = 5e-5 and 2e-4 |
 | **Automatic reconnection (60 s)** | required (#4), not implemented. The latch is currently permanent. Scope confirmation pending with the product owner. Note it composes correctly with what exists: after a trip the current goes to zero and the PCC voltage collapses, so the reconnect timer can never start while the island is live — it is not possible to reconnect into an island |
 | **Three-phase demonstration** | §4 defends the result analytically. Physical integration depends on the `Iq_ref` interface, §8 |

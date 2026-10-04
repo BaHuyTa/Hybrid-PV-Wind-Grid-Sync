@@ -28,7 +28,7 @@ if ~bdIsLoaded(mdl), load_system(fullfile(here,[mdl '.slx'])); end
 
 % make sure the two signals we plot are logged
 tagSignal(mdl, 'SFS:69', 'f_est');    % ClampBand output  (frequency estimate)
-tagSignal(mdl, 'SFS:76', 'trip');     % TripLogic output
+tagBlockOut(mdl, 'TripLogic', 'trip');   % relay output
 set_param(mdl,'SignalLogging','on','SignalLoggingName','logsout');
 
 b_cf0  = Simulink.ID.getFullName('SFS:38');   % Constant chopping factor
@@ -47,6 +47,16 @@ end
 % ---------------------------------------------------------------------
 function tagSignal(mdl, sid, name)
 ph = get_param(Simulink.ID.getFullName(sid),'PortHandles');
+set_param(ph.Outport(1),'DataLogging','on', ...
+    'DataLoggingNameMode','Custom','DataLoggingName',name);
+end
+
+% ---------------------------------------------------------------------
+function tagBlockOut(mdl, blkName, name)
+%TAGBLOCKOUT Tag a block's first output, found by NAME rather than by SID.
+%   SIDs do not survive a block being deleted and re-added, which happens
+%   whenever TripLogic is re-linked to the library. The name does.
+ph = get_param([mdl '/' blkName],'PortHandles');
 set_param(ph.Outport(1),'DataLogging','on', ...
     'DataLoggingNameMode','Custom','DataLoggingName',name);
 end

@@ -21,6 +21,7 @@ item still open is the three-phase interface; see [Remaining](#remaining).
 | `make_fig5.m` | regenerates fig5, the SFS on/off comparison — the headline SC5 evidence |
 | `ndz_sweep.m` | runs the (ΔQ × Qf) sweep into `results/ndz_sweep.mat` |
 | `ndz_plot.m` | draws fig6, the non-detection zone, from that `.mat` |
+| `buildProtectionLib.m` → `protectionLib.slx` | **the reusable relay block** — what integration links to |
 | `pll_startup_probe.m` | measures how long the SRF-PLL startup excursion leaves the trip band |
 | `pll_jump_probe.m` | measures the same for a phase jump — sets the pickup delay |
 | `design-record.md` | **every design choice, its justification and its source** — written for assembling the report |
@@ -121,22 +122,29 @@ the frequency settles and never trips.
 
 ### The non-detection zone
 
-77 points, ΔQ ∈ [−0.5, +0.5] in 11 steps × Qf ∈ {0.5 … 3.5} in 7 steps. 72 detected,
-5 not. Detection times 18.4–591.5 ms.
+77 points, ΔQ ∈ [−0.5, +0.5] in 11 steps × Qf ∈ {0.5 … 3.5} in 7 steps. **71 detected,
+6 not.** Detection times 118.5–391.8 ms. Re-run 2026-10-04 with the relay delays in place.
 
 | Qf | detected | detection time |
 |---|---|---|
-| 0.5 | 11/11 | 18.4–97.2 ms |
-| **1.0** | **11/11** | **18.5–98.0 ms** |
-| 1.5 | 11/11 | 18.6–137.1 ms |
-| 2.0 | 11/11 | 18.7–234.8 ms |
-| 2.5 | 10/11 | 18.8–291.7 ms |
-| 3.0 | 9/11 | 18.9–125.5 ms |
-| 3.5 | 9/11 | 19.0–591.5 ms |
+| 0.5 | 11/11 | 118.6–197.4 ms |
+| **1.0** | **11/11** | **118.5–198.1 ms** |
+| 1.5 | 11/11 | 118.7–237.1 ms |
+| 2.0 | 11/11 | 118.8–334.9 ms |
+| 2.5 | 10/11 | 118.9–391.8 ms |
+| 3.0 | 9/11 | 119.0–226.3 ms |
+| 3.5 | 8/11 | 119.1–255.4 ms |
 
-**At Qf = 1 the non-detection zone is empty** across the full ±50% reactive range. All
-five failures sit at Qf ≥ 2.5 and at ΔQ of 0 or −0.1 — the detuning that most nearly
-cancels the phase SFS demands.
+**At Qf = 1 the non-detection zone is empty** across the full ±50% reactive range, so
+SC5 is unaffected. All six failures sit at Qf ≥ 2.5, well above the test condition, and
+at ΔQ between −0.2 and 0 — the detuning that most nearly cancels the phase SFS demands.
+
+The persistence delay cost one case, Qf = 3.5 / ΔQ = −0.2, which the earlier sweep
+detected at 591.5 ms. That case does not run away: the frequency falls and then
+oscillates, dipping below 47 Hz for 85.1 ms every ~340 ms. The old relay latched on the
+first dip; the new one needs 100 ms and never confirms. Tripping on an 85 ms dip is
+exactly what a persistence delay exists to prevent, so this is the relay working — but
+it is an honest cost, and it is recorded in `design-record.md` with the trade-off.
 
 **ΔP is deliberately not swept.** `θ_load` depends only on Qf and the ratio `f/f_res`,
 so real-power mismatch moves the resistance and therefore the voltage, but leaves the
@@ -167,6 +175,52 @@ useful equilibrium — it produces none, which is better.**
 So there are two distinct failure modes, and they are not interchangeable. Raising
 `kSFS` cures the geometric one by pushing the equilibrium out of the band; it cures
 the temporal one only incidentally, by making the approach faster.
+
+## For integration — using the relay
+
+**The rig is not what integration needs.** `SFS.slx` carries its own grid source,
+breaker and RLC test load, none of which belong in the integrated plant. What
+integration needs is the relay, and that is published as a library block:
+
+```matlab
+addpath(genpath('models'));
+buildProtectionLib            % regenerates protectionLib.slx from source
+% then drag protectionLib/AntiIslandingRelay into the model
+```
+
+```
+AntiIslandingRelay
+  in   f_hz   Hz   frequency estimate at the PCC
+  out  trip   -    latches 1, stays 1
+
+  mask f_min    47      Hz   under-frequency trip
+       f_max    52      Hz   over-frequency trip
+       t_arm    0.5     s    relay blocked before this
+       t_pickup 0.1     s    out-of-band must persist this long
+       Ts       1e-4    s    persistence timer rate
+```
+
+Defaults are numeric and self-contained, so the block works in a model that has never
+heard of `protectionParams`. `SFS.slx` links to this same block and drives the mask from
+`pp.*`, so the rig and the integrated model cannot drift apart — edit
+`buildProtectionLib.m` and re-run, never the library by hand.
+
+**Wiring it in:**
+
+| | |
+|---|---|
+| **`f_hz` ←** | `srfPllLib/SRF_PLL` output 2. No estimator of your own is needed; the PLL's estimate is continuous rather than once-per-cycle, so it is better than the rig's. Its ±10 Hz clamp (40–60 Hz) sits comfortably outside the 47–52 band |
+| **`trip` →** | the inverter's `enable`, once Duc adds one. Until then, a switch that forces `Id_ref` and `Iq_ref` to zero. That switch has to sit between the DC-link voltage loop and the inverter's `Id_ref` inport, because the DC-link loop is what normally drives it |
+
+**Raise `t_arm` for the integrated model.** 0.5 s is sized for the rig, where the only
+startup transient is the PLL acquiring lock — measured at up to 170 ms. The integrated
+plant also has the DC bus charging and the LCL filter settling, neither of which has
+been measured here. Set it past the point where the bus voltage and PCC voltage have
+settled, and confirm `trip` is 0 through startup before trusting anything downstream.
+
+**The latch is permanent.** Once `trip` goes high it stays high for the rest of the run;
+there is no reconnection path. AS/NZS 4777.2 requires reconnection after 60 s within
+limits, which is not implemented — see [Remaining](#remaining).
 
 ## Single-phase equivalent
 
