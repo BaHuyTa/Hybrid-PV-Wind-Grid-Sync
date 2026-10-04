@@ -53,9 +53,9 @@ end
 
 % ---------------------------------------------------------------------
 function plotComparison(outOff, outOn, pp, outdir)
-fOff = outOff.logsout.get('f_est');
-fOn  = outOn.logsout.get('f_est');
-trOn = outOn.logsout.get('trip');
+fOff = pick(outOff, 'f_est');
+fOn  = pick(outOn,  'f_est');
+trOn = pick(outOn,  'trip');
 
 tTrip = trOn.Values.Time(find(double(trOn.Values.Data) > 0.5, 1));
 tA = fOff.Values.Time;  fA = fOff.Values.Data;
@@ -111,4 +111,16 @@ close(fg);
 fprintf('\nSFS disabled : settles %.2f Hz, no trip\n', fA(end));
 fprintf('SFS enabled  : trip at %.4f s, detection %.4f s\n', tTrip, tTrip - pp.t_island);
 fprintf('written: %s\n', fullfile(outdir,'fig5_sfs_on_vs_off.png'));
+end
+
+% ---------------------------------------------------------------------
+function s = pick(out, name)
+%PICK Logged signal by name, tolerant of a name carried by two signals.
+%   protection_figures tags the FreqEstimator subsystem outport as "f_est"
+%   and this script tags the ClampBand output inside it. They are the same
+%   line, but get() then returns a Dataset rather than an element.
+s = out.logsout.get(name);
+if isa(s, 'Simulink.SimulationData.Dataset')
+    s = s.getElement(1);
+end
 end

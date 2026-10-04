@@ -52,6 +52,8 @@ decisions below point at.
 | 2 | Under-frequency trip | **47 Hz** | same table | **verified** — same |
 | 3 | Maximum disconnection time | **2 s** | same table, both the frequency functions and "Active anti-islanding" carry 2 s | **verified** — same; this is SC5 |
 | 4 | Reconnection delay | **60 s** | same table, "Reconnection Delay 60 s" | **verified** — same; **not yet implemented**, see §7 |
+| 4a | Relay blocking before `t_arm` = 0.5 s | A frequency estimate is not valid until the estimator has locked. Measured on Aqib's SRF-PLL: the startup excursion leaves 47–52 Hz for up to **170 ms**, worst case at a 270° initial phase. 0.5 s gives 3× margin and costs nothing — the island is at t = 1.0 s | **measured** — `pll_startup_probe` |
+| 4b | Pickup delay `t_pickup` = 0.1 s | The out-of-band condition must persist before the latch sets, or a disturbance the plant is required to ride through trips the relay. A **30° phase jump — the SC4 stimulus — drives the estimate to 60 Hz for 12.4 ms**; a 60° jump for 20.7 ms. 100 ms gives ~5× margin and still leaves 10× against `t_trip_max` | **measured** — `pll_jump_probe` |
 | 5 | Central protection relay | **out of scope** | above 30 kVA the network operator additionally requires a central relay (vector shift 20°, ROCOF 4 Hz/s, current unbalance 21.7 A). This is a *network connection* requirement, not AS/NZS 4777.2, and the project is a simulation of the inverter-side protection | **verified** that the requirement exists; the scope decision is ours |
 
 **Note on the source.** The Jemena document is a distribution network operator's compliance
@@ -170,13 +172,13 @@ All from the scripts in this folder. Regenerate with `protection_figures`, `make
 
 | quantity | value | source |
 |---|---|---|
-| Detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **98.0 ms** | `make_fig5` → `fig5` |
+| Detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **198.1 ms** | `make_fig5` → `fig5` |
 | Criterion | 2.0 s | AS/NZS 4777.2 (#3) |
-| Margin | **20×** | |
+| Margin | **10×** | |
 | PCC voltage change on islanding | **−2.72%** | `protection_figures` → `fig3` |
 | Current THD at rated output | **0.60%** | `protection_figures` → `fig2` |
 | Fundamental current | 306.23 A pk vs `pp.Ipvmax` = 306.19 A | same |
-| Frequency at trip | 52.03 Hz vs 52.0 threshold | `protection_figures` → `fig4` |
+| Frequency at trip | 55.0 Hz (the estimator's own clamp; it crosses 52.0 at 98 ms and the relay confirms for a further 100 ms) | `protection_figures` → `fig4` |
 
 The **−2.72%** figure is the quantitative justification for an active scheme: the matched
 load draws almost exactly what the inverter supplies, so no voltage or current magnitude
@@ -184,6 +186,13 @@ moves far enough for passive protection to act on. With SFS disabled the frequen
 and never trips (`fig5`, left trace).
 
 ### Non-detection zone
+
+> **These times predate the pickup delay** (added 2026-10-04) and are each short by
+> `t_pickup` = 100 ms. The detected/not-detected split is not expected to change — the
+> slowest detected case was 591.5 ms, so +100 ms leaves it far short of 2 s, and a
+> persistence delay can only ever slow detection, never enable it. **That reasoning is
+> not yet verified by measurement — re-run `ndz_sweep` before quoting these in the
+> report.** The earlier run is kept at `results/ndz_sweep_PRE_PICKUP_DELAY.mat`.
 
 77 points: ΔQ ∈ [−0.5, +0.5] × 11, Qf ∈ {0.5 … 3.5} × 7. **72 detected, 5 not.** Detection
 times 18.4–591.5 ms.
@@ -211,6 +220,7 @@ nearly cancels the phase SFS demands.
 | **Qf = 1 numeric value** | **asserted** — confirm against the full AS/NZS IEC 62116:2020 text (#7) |
 | **Gain condition vs IEEE 1547.1** | **asserted** — the formula `kSFS > 4Qf/(πf_n)` is used throughout; confirm the derivation. Note the sweep independently corroborates it (§5) |
 | **Frequency thresholds vs the standard itself** | **verified** against a network operator document; confirm against AS/NZS 4777.2:2020 Table 4.1/4.2 directly |
+| **Re-run the NDZ sweep** | required — every stored detection time predates `t_pickup`. ~1 hour, chunkable |
 | **Does drift rate scale with `pp.Ts`?** | unchecked. If it does, 98 ms is partly an artefact of the 10 kHz control rate. Testable: re-run `make_fig5` at `pp.Ts` = 5e-5 and 2e-4 |
 | **Automatic reconnection (60 s)** | required (#4), not implemented. The latch is currently permanent. Scope confirmation pending with the product owner. Note it composes correctly with what exists: after a trip the current goes to zero and the PCC voltage collapses, so the reconnect timer can never start while the island is live — it is not possible to reconnect into an island |
 | **Three-phase demonstration** | §4 defends the result analytically. Physical integration depends on the `Iq_ref` interface, §8 |

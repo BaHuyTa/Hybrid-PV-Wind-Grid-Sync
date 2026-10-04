@@ -5,7 +5,7 @@ within 2 s), `docs/traceability.md`
 
 **Status: SC5 met in the single-phase equivalent.** The detection chain is closed and
 measured. At the test condition the standard specifies — matched RLC load, Qf = 1 —
-Sandia Frequency Shift detects the island and disconnects in **98 ms** against a 2 s
+Sandia Frequency Shift detects the island and disconnects in **198 ms** against a 2 s
 budget, and the non-detection zone is empty across ±50% reactive mismatch. The one
 item still open is the three-phase interface; see [Remaining](#remaining).
 
@@ -21,6 +21,8 @@ item still open is the three-phase interface; see [Remaining](#remaining).
 | `make_fig5.m` | regenerates fig5, the SFS on/off comparison — the headline SC5 evidence |
 | `ndz_sweep.m` | runs the (ΔQ × Qf) sweep into `results/ndz_sweep.mat` |
 | `ndz_plot.m` | draws fig6, the non-detection zone, from that `.mat` |
+| `pll_startup_probe.m` | measures how long the SRF-PLL startup excursion leaves the trip band |
+| `pll_jump_probe.m` | measures the same for a phase jump — sets the pickup delay |
 | `design-record.md` | **every design choice, its justification and its source** — written for assembling the report |
 
 ```matlab
@@ -65,9 +67,39 @@ cross → period measure (triggered, clock minus unit delay) → reciprocal → 
 standalone estimator because the SRF-PLL on the control branch is still a stub
 (`GridAngle_ideal`).
 
-**5. The relay.** `TripLogic` compares the estimate against 47 / 52 Hz, ORs the two,
-and latches. `TripGate` forces the current reference to zero. The gate sits *before*
+**5. The relay.** `TripLogic` compares the estimate against 47 / 52 Hz and ORs the two,
+then applies two guards before latching:
+
+```
+out_of_band = (f >= f_max) OR (f <= f_min)
+armed       = t >= t_arm                      blocking:   is the estimate valid yet?
+cond        = out_of_band AND armed
+elapsed     = how long cond has held, reset the moment it clears
+trip        = LATCH(elapsed >= t_pickup)      persistence: is this real?
+```
+
+`TripGate` then forces the current reference to zero. The gate sits *before*
 `ctrl_delay`, not after, or it closes an algebraic loop.
+
+**Both guards are measured, not guessed.** A bare comparator latches the instant the
+estimate leaves the band, and the estimate is not trustworthy at every instant:
+
+- **At startup** the SRF-PLL has to acquire lock, and while it does the frequency
+  estimate is meaningless. Worst case measured at a 270° initial phase, where the loop
+  slews almost a full turn: **170 ms outside 47–52 Hz**, pinned to the clamp rails at
+  40 and 60 Hz. `t_arm` = 0.5 s blocks the relay until well past this. Run
+  `pll_startup_probe` to reproduce. This was found by integration, not here — the rig's
+  own zero-crossing estimator does not have an acquisition transient, so the fault only
+  appears once the relay is fed the real PLL.
+- **During a disturbance the plant must ride through.** A 30° phase jump — the SC4
+  stimulus — drives the estimate to 60 Hz for **12.4 ms**, and a 60° jump for 20.7 ms.
+  Without persistence the anti-islanding relay would trip on a grid event the PLL is
+  specified to recover from. `t_pickup` = 0.1 s gives roughly 5× margin. Run
+  `pll_jump_probe` to reproduce.
+
+The cost is one `t_pickup` added to every detection: 98 ms becomes 198 ms, which is
+still 10× inside the 2 s criterion. The benefit is that the relay no longer fires on
+either of the two transients above.
 
 ## Results
 
@@ -75,9 +107,9 @@ and latches. `TripGate` forces the current reference to zero. The gate sits *bef
 
 | quantity | value |
 |---|---|
-| detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **98.0 ms** |
+| detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **198.1 ms** |
 | criterion | 2.0 s |
-| margin | 20× |
+| margin | 10× |
 | PCC voltage change on islanding | **−2.72%** |
 | current THD at rated output | 0.60% |
 | fundamental | 306.23 A pk against `pp.Ipvmax` = 306.19 A |

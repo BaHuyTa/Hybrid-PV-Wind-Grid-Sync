@@ -77,10 +77,35 @@ pp.L_load = pp.R_load/(pp.w_n*pp.Qf); % 3.395 mH
 %   would change Qf and invalidate the test load.
 pp.iL0 = -pp.Vg_amp/(pp.w_n*pp.L_load);   % A, inductor current at t = 0
 
-% --- Trip thresholds (CONFIRM against AS/NZS 4777.2 table) ---------------
+% --- Trip thresholds -----------------------------------------------------
+%   Verified 2026-10-04 against AS/NZS 4777.2:2020 (Australia A parameter
+%   set) for installations above 30 kVA up to 200 kVA three-phase, which is
+%   our band at 150 kVA. See models/protection/design-record.md section 2.
 pp.f_min = 47.0;         % Hz
 pp.f_max = 52.0;         % Hz
 pp.t_trip_max = 2.0;     % s, success criterion SC5
+
+% --- Relay blocking and persistence --------------------------------------
+%   The relay must not act on a frequency estimate that is not yet valid,
+%   nor on a disturbance the plant is required to ride through.
+%
+%   t_arm   blocks the relay until the estimator has settled. Measured on
+%           Aqib's SRF-PLL: the startup excursion leaves the 47-52 Hz band
+%           for up to 170 ms, worst case at a 270 deg initial phase, where
+%           the loop slews almost a full turn. 0.5 s gives 3x margin and
+%           costs nothing, since the island is at t = 1.0 s. Raise it for
+%           the integrated model, where the DC bus and filter also start up.
+%
+%   t_pickup requires the out-of-band condition to PERSIST before latching.
+%           Without it a legitimate grid disturbance trips the relay: a
+%           30 deg phase jump - the SC4 stimulus, which the PLL is specified
+%           to ride through - drives the estimate to 60 Hz for 12.4 ms, and
+%           a 60 deg jump for 20.7 ms. 100 ms gives ~5x margin on the worst
+%           of those and still leaves a 10x margin against t_trip_max.
+%
+%   Both are measured, not assumed; the probes are in design-record.md.
+pp.t_arm    = 0.5;       % s, relay blocked before this
+pp.t_pickup = 0.1;       % s, out-of-band must persist this long to latch
 
 % --- Simulation timing ---------------------------------------------------
 pp.t_island = 1.0;       % s, breaker opens (settle first, then island)
