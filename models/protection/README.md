@@ -16,7 +16,8 @@ item still open is the three-phase interface; see [Remaining](#remaining).
 | `protectionParams.m` | single source of truth — every rating derives from `pp.S_plant` |
 | `rlcTestLoad.m` | (ΔP, ΔQ) → R, L, C for the NDZ sweep, holding Qf constant |
 | `SFS.slx` | **the rig** — inverter, RLC test load, grid, breaker, estimator, trip logic |
-| `SFS_test1.slx` | predecessor, kept as the verified record behind the Week 7–8 figures |
+| `SFS_test1.slx` | Week 7–8 record. Open loop: `fpcc` is a constant, so there is no positive feedback and no trip. Behind `fig1`–`fig4` as stored in `results/journal_week7` and `journal_week8` |
+| `SFS_w9_record.slx` | Week 9 record. Loop closed, trip logic present, but **no relay blocking or persistence** — detection 98.0 ms. Behind the figures in `results/journal_week9`. Kept because the current rig no longer reproduces those numbers |
 | `protection_figures.m` | regenerates fig1–fig4 (phase reset, spectrum, island event, frequency) |
 | `make_fig5.m` | regenerates fig5, the SFS on/off comparison — the headline SC5 evidence |
 | `ndz_sweep.m` | runs the (ΔQ × Qf) sweep into `results/ndz_sweep.mat` |
@@ -33,6 +34,30 @@ protection_figures           % fig1-fig4
 make_fig5                    % fig5  - the SC5 headline
 ndz_sweep(1:2); ndz_plot     % fig6  - run the sweep in chunks, see below
 ```
+
+## Three models, and why
+
+The rig has been snapshotted at each point where a published figure was taken, because
+the current model does not reproduce earlier numbers and a journal entry that cannot be
+re-run is not evidence.
+
+| model | loop | relay | detection | figures |
+|---|---|---|---|---|
+| `SFS_test1.slx` | open (`fpcc` constant) | none | never trips | W7, W8 |
+| `SFS_w9_record.slx` | closed | bare comparator | **98.0 ms** | W9 |
+| `SFS.slx` | closed | blocking + persistence | **148.1 ms** | current |
+
+`SFS_w9_record.slx` is byte-identical to `SFS.slx` as it stood at commit `32a531b`,
+recovered with `git show`. Verified by running it: no `PickupTimer` block, no library
+link, detection 98.0 ms — matching `results/journal_week9/captions.txt`.
+
+**Why 98 became 148:** the bare comparator latched the moment the frequency estimate
+left 47–52 Hz, which is correct only if the estimate is trustworthy at every instant. It
+is not — a PLL reports its internal search state before it locks. Integration found the
+relay latching at t = 0. The fix cost 50 ms of detection time; the reasoning and the
+measurements are in `design-record.md` §2.
+
+Snapshots are never edited. If the current rig needs to change, change `SFS.slx`.
 
 ## How detection works
 
