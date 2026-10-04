@@ -55,6 +55,28 @@ scripts/      analysis + verification scripts
 tests/scenarios/  test cases and expected results
 ```
 
+### Protection, for integration
+
+Anti-islanding is published as a **library block**, not as a model to copy. The rig
+(`models/protection/SFS.slx`) carries its own grid source, breaker and RLC test load,
+none of which belong in the integrated plant.
+
+```matlab
+addpath(genpath('models'));
+buildProtectionLib        % writes models/protection/protectionLib.slx
+% then drop protectionLib/AntiIslandingRelay into the model
+```
+
+```
+AntiIslandingRelay    in: f_hz (from srfPllLib/SRF_PLL output 2)
+                      out: trip (latches, no reconnection yet)
+```
+
+Full wiring, the parameter that must be changed for the integrated model (`t_arm`), and
+a startup assertion to check it with, are in
+[models/protection/README.md](models/protection/README.md). The reasoning behind every
+setting is in [models/protection/design-record.md](models/protection/design-record.md).
+
 ## Team
 
 | Name | Area | Studio |
