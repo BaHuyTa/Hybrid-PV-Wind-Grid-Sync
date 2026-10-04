@@ -5,7 +5,7 @@ within 2 s), `docs/traceability.md`
 
 **Status: SC5 met in the single-phase equivalent.** The detection chain is closed and
 measured. At the test condition the standard specifies — matched RLC load, Qf = 1 —
-Sandia Frequency Shift detects the island and disconnects in **198 ms** against a 2 s
+Sandia Frequency Shift detects the island and disconnects in **148 ms** against a 2 s
 budget, and the non-detection zone is empty across ±50% reactive mismatch. The one
 item still open is the three-phase interface; see [Remaining](#remaining).
 
@@ -108,9 +108,9 @@ either of the two transients above.
 
 | quantity | value |
 |---|---|
-| detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **198.1 ms** |
+| detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **148.1 ms** |
 | criterion | 2.0 s |
-| margin | 10× |
+| margin | 13.5× |
 | PCC voltage change on islanding | **−2.72%** |
 | current THD at rated output | 0.60% |
 | fundamental | 306.23 A pk against `pp.Ipvmax` = 306.19 A |
@@ -122,29 +122,29 @@ the frequency settles and never trips.
 
 ### The non-detection zone
 
-77 points, ΔQ ∈ [−0.5, +0.5] in 11 steps × Qf ∈ {0.5 … 3.5} in 7 steps. **71 detected,
-6 not.** Detection times 118.5–391.8 ms. Re-run 2026-10-04 with the relay delays in place.
+77 points, ΔQ ∈ [−0.5, +0.5] in 11 steps × Qf ∈ {0.5 … 3.5} in 7 steps. **72 detected,
+5 not.** Detection times 68.5–641.6 ms. Re-run 2026-10-04 with the relay delays in place.
 
 | Qf | detected | detection time |
 |---|---|---|
-| 0.5 | 11/11 | 118.6–197.4 ms |
-| **1.0** | **11/11** | **118.5–198.1 ms** |
-| 1.5 | 11/11 | 118.7–237.1 ms |
-| 2.0 | 11/11 | 118.8–334.9 ms |
-| 2.5 | 10/11 | 118.9–391.8 ms |
-| 3.0 | 9/11 | 119.0–226.3 ms |
-| 3.5 | 8/11 | 119.1–255.4 ms |
+| 0.5 | 11/11 | 68.5–147.3 ms |
+| **1.0** | **11/11** | **68.5–148.1 ms** |
+| 1.5 | 11/11 | 68.6–187.2 ms |
+| 2.0 | 11/11 | 68.7–284.8 ms |
+| 2.5 | 10/11 | 68.9–341.8 ms |
+| 3.0 | 9/11 | 69.0–175.6 ms |
+| 3.5 | 9/11 | 69.1–641.6 ms |
 
-**At Qf = 1 the non-detection zone is empty** across the full ±50% reactive range, so
-SC5 is unaffected. All six failures sit at Qf ≥ 2.5, well above the test condition, and
-at ΔQ between −0.2 and 0 — the detuning that most nearly cancels the phase SFS demands.
+**At Qf = 1 the non-detection zone is empty** across the full ±50% reactive range. All
+five failures sit at Qf ≥ 2.5, well above the test condition, and at ΔQ of −0.1 or 0 —
+the detuning that most nearly cancels the phase SFS demands.
 
-The persistence delay cost one case, Qf = 3.5 / ΔQ = −0.2, which the earlier sweep
-detected at 591.5 ms. That case does not run away: the frequency falls and then
-oscillates, dipping below 47 Hz for 85.1 ms every ~340 ms. The old relay latched on the
-first dip; the new one needs 100 ms and never confirms. Tripping on an 85 ms dip is
-exactly what a persistence delay exists to prevent, so this is the relay working — but
-it is an honest cost, and it is recorded in `design-record.md` with the trade-off.
+**The persistence delay costs no coverage.** The same five conditions are undetected as
+before any delay existed. That is why `t_pickup` is 0.05 s: at 0.1 s one further case
+(Qf = 3.5, ΔQ = −0.2) was lost, because there the frequency oscillates rather than
+running away, dipping below 47 Hz for only 85.1 ms at a time. The setting has to sit
+between the longest disturbance to ignore (20.7 ms) and the shortest excursion to catch
+(85.1 ms); `design-record.md` §6 has the derivation.
 
 **ΔP is deliberately not swept.** `θ_load` depends only on Qf and the ratio `f/f_res`,
 so real-power mismatch moves the resistance and therefore the voltage, but leaves the
@@ -178,49 +178,93 @@ the temporal one only incidentally, by making the approach faster.
 
 ## For integration — using the relay
 
-**The rig is not what integration needs.** `SFS.slx` carries its own grid source,
-breaker and RLC test load, none of which belong in the integrated plant. What
-integration needs is the relay, and that is published as a library block:
+**Read this before wiring anything in.** The rig is not what integration needs:
+`SFS.slx` carries its own grid source, breaker and RLC test load, none of which belong
+in the integrated plant. What you need is the relay, published as a library block.
+
+### 1. Generate the library
 
 ```matlab
 addpath(genpath('models'));
-buildProtectionLib            % regenerates protectionLib.slx from source
-% then drag protectionLib/AntiIslandingRelay into the model
+buildProtectionLib          % writes models/protection/protectionLib.slx
 ```
 
+The `.slx` is generated from `buildProtectionLib.m`, so the source of truth is text that
+git can merge. **Never edit the library by hand** — edit the script and re-run, or your
+change is lost the next time anyone regenerates it. `SFS.slx` links to this same block,
+so the rig and the integrated model cannot drift apart.
+
+### 2. Drop the block in
+
 ```
-AntiIslandingRelay
+protectionLib/AntiIslandingRelay
+
   in   f_hz   Hz   frequency estimate at the PCC
-  out  trip   -    latches 1, stays 1
+  out  trip   -    latches to 1 and stays there
 
-  mask f_min    47      Hz   under-frequency trip
-       f_max    52      Hz   over-frequency trip
-       t_arm    0.5     s    relay blocked before this
-       t_pickup 0.1     s    out-of-band must persist this long
-       Ts       1e-4    s    persistence timer rate
+  mask f_min    47     Hz   under-frequency trip      AS/NZS 4777.2
+       f_max    52     Hz   over-frequency trip       AS/NZS 4777.2
+       t_arm    0.5    s    relay blocked before this     ** CHANGE THIS **
+       t_pickup 0.05   s    out-of-band must persist
+       Ts       1e-4   s    persistence timer rate
 ```
 
 Defaults are numeric and self-contained, so the block works in a model that has never
-heard of `protectionParams`. `SFS.slx` links to this same block and drives the mask from
-`pp.*`, so the rig and the integrated model cannot drift apart — edit
-`buildProtectionLib.m` and re-run, never the library by hand.
+heard of `protectionParams`. Leave `f_min`, `f_max` and `t_pickup` alone unless you have
+a measured reason — the derivation for each is in `design-record.md`.
 
-**Wiring it in:**
+### 3. Wire the input
 
-| | |
+```
+srfPllLib/SRF_PLL  output 2  (f_hz)   →   AntiIslandingRelay/f_hz
+```
+
+Use the PLL's estimate, not a new one. It is continuous rather than once-per-cycle, so
+it is better than the rig's own estimator, and its ±10 Hz clamp (40–60 Hz) sits well
+outside the 47–52 band. `Ts` on the mask already matches the PLL's `Ts` of 1e-4.
+
+### 4. Wire the output
+
+`trip` has to actually stop the inverter, or the relay detects an island and does
+nothing about it.
+
+| if | then |
 |---|---|
-| **`f_hz` ←** | `srfPllLib/SRF_PLL` output 2. No estimator of your own is needed; the PLL's estimate is continuous rather than once-per-cycle, so it is better than the rig's. Its ±10 Hz clamp (40–60 Hz) sits comfortably outside the 47–52 band |
-| **`trip` →** | the inverter's `enable`, once Duc adds one. Until then, a switch that forces `Id_ref` and `Iq_ref` to zero. That switch has to sit between the DC-link voltage loop and the inverter's `Id_ref` inport, because the DC-link loop is what normally drives it |
+| Duc has added an `enable` input to `invPlantAvg` / `invPlantSw` | wire `trip` through a NOT to `enable`. This is the preferred path — blocking the gates is what a real inverter does |
+| he has not yet | use a Switch that forces `Id_ref` and `Iq_ref` to zero when `trip` is 1. **The switch must sit between the DC-link voltage loop and the inverter's `Id_ref` inport**, because the DC-link loop is what normally drives `Id_ref` |
 
-**Raise `t_arm` for the integrated model.** 0.5 s is sized for the rig, where the only
-startup transient is the PLL acquiring lock — measured at up to 170 ms. The integrated
-plant also has the DC bus charging and the LCL filter settling, neither of which has
-been measured here. Set it past the point where the bus voltage and PCC voltage have
-settled, and confirm `trip` is 0 through startup before trusting anything downstream.
+### 5. Raise `t_arm`, then check it
 
-**The latch is permanent.** Once `trip` goes high it stays high for the rest of the run;
-there is no reconnection path. AS/NZS 4777.2 requires reconnection after 60 s within
-limits, which is not implemented — see [Remaining](#remaining).
+**This is the one value you must change.** `t_arm = 0.5 s` is sized for the rig, where
+the only startup transient is the PLL acquiring lock — measured at up to 170 ms, worst
+case at a 270° initial phase. Your model also has the DC bus charging and the LCL filter
+settling, neither of which has been measured here.
+
+Set it past the point where the bus voltage and the PCC voltage have both settled, then
+confirm:
+
+```matlab
+% trip must be 0 for the whole of startup
+out = sim(yourModel);
+assert(~any(out.logsout.get('trip').Values.Data > 0.5), ...
+       't_arm is too short - the relay is latching during startup');
+```
+
+If that assertion fires, raise `t_arm` and re-run. Do not reduce `t_pickup` to work
+around it; the two solve different problems and `t_pickup` has a measured upper bound.
+
+### What this block does not do
+
+- **The latch is permanent.** Once `trip` is 1 it stays 1 for the rest of the run. There
+  is no reconnection path. AS/NZS 4777.2 requires reconnection once voltage and
+  frequency have been in range for 60 s; that is not implemented — see
+  [Remaining](#remaining).
+- **It does not perturb anything.** This is the relay only. The SFS perturbation enters
+  through `Iq_ref` and is blocked on that interface being assigned — see
+  `design-record.md` §8. Until then the integrated plant has *passive* frequency
+  protection, which AS/NZS 4777.2 requires independently, but not active anti-islanding.
+- **It assumes a trustworthy `f_hz`.** Garbage in, nuisance trip out. `t_arm` and
+  `t_pickup` guard the two cases that were measured; they are not a general filter.
 
 ## Single-phase equivalent
 

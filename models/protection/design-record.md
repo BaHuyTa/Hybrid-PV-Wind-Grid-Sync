@@ -53,7 +53,7 @@ decisions below point at.
 | 3 | Maximum disconnection time | **2 s** | same table, both the frequency functions and "Active anti-islanding" carry 2 s | **verified** — same; this is SC5 |
 | 4 | Reconnection delay | **60 s** | same table, "Reconnection Delay 60 s" | **verified** — same; **not yet implemented**, see §7 |
 | 4a | Relay blocking before `t_arm` = 0.5 s | A frequency estimate is not valid until the estimator has locked. Measured on Aqib's SRF-PLL: the startup excursion leaves 47–52 Hz for up to **170 ms**, worst case at a 270° initial phase. 0.5 s gives 3× margin and costs nothing — the island is at t = 1.0 s | **measured** — `pll_startup_probe` |
-| 4b | Pickup delay `t_pickup` = 0.1 s | The out-of-band condition must persist before the latch sets, or a disturbance the plant is required to ride through trips the relay. A **30° phase jump — the SC4 stimulus — drives the estimate to 60 Hz for 12.4 ms**; a 60° jump for 20.7 ms. 100 ms gives ~5× margin and still leaves 10× against `t_trip_max` | **measured** — `pll_jump_probe` |
+| 4b | Pickup delay `t_pickup` = 0.05 s | The out-of-band condition must persist before the latch sets, or a disturbance the plant is required to ride through trips the relay. A **30° phase jump — the SC4 stimulus — drives the estimate to 60 Hz for 12.4 ms**; a 60° jump for 20.7 ms. 50 ms gives 2.4× margin on the worst of those, and unlike 0.1 s it costs no detections — see §6 | **measured** — `pll_jump_probe`, `ndz_sweep` |
 | 5 | Central protection relay | **out of scope** | above 30 kVA the network operator additionally requires a central relay (vector shift 20°, ROCOF 4 Hz/s, current unbalance 21.7 A). This is a *network connection* requirement, not AS/NZS 4777.2, and the project is a simulation of the inverter-side protection | **verified** that the requirement exists; the scope decision is ours |
 
 **Note on the source.** The Jemena document is a distribution network operator's compliance
@@ -172,13 +172,13 @@ All from the scripts in this folder. Regenerate with `protection_figures`, `make
 
 | quantity | value | source |
 |---|---|---|
-| Detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **198.1 ms** | `make_fig5` → `fig5` |
+| Detection time, matched load (ΔP = ΔQ = 0, Qf = 1) | **148.1 ms** | `make_fig5` → `fig5` |
 | Criterion | 2.0 s | AS/NZS 4777.2 (#3) |
-| Margin | **10×** | |
+| Margin | **13.5×** | |
 | PCC voltage change on islanding | **−2.72%** | `protection_figures` → `fig3` |
 | Current THD at rated output | **0.60%** | `protection_figures` → `fig2` |
 | Fundamental current | 306.23 A pk vs `pp.Ipvmax` = 306.19 A | same |
-| Frequency at trip | 55.0 Hz (the estimator's own clamp; it crosses 52.0 at 98 ms and the relay confirms for a further 100 ms) | `protection_figures` → `fig4` |
+| Frequency at trip | 53.98 Hz — it crosses 52.0 at 98 ms, then the relay confirms for a further 50 ms while the frequency keeps climbing | `protection_figures` → `fig4` |
 
 The **−2.72%** figure is the quantitative justification for an active scheme: the matched
 load draws almost exactly what the inverter supplies, so no voltage or current magnitude
@@ -187,9 +187,12 @@ and never trips (`fig5`, left trace).
 
 ### Non-detection zone
 
-Re-run 2026-10-04 with the blocking and persistence delays in place. 77 points:
-ΔQ ∈ [−0.5, +0.5] × 11, Qf ∈ {0.5 … 3.5} × 7. **71 detected, 6 not.** Detection times
-118.5–391.8 ms.
+Re-run 2026-10-04 with the blocking and persistence delays in place, at `t_pickup`
+= 0.05 s. 77 points: ΔQ ∈ [−0.5, +0.5] × 11, Qf ∈ {0.5 … 3.5} × 7. **72 detected, 5
+not.** Detection times 68.5–641.6 ms.
+
+**The persistence delay now costs no coverage at all.** The same five conditions are
+undetected as before any delay existed; only the times have moved.
 
 > **A prediction recorded here was wrong, and is corrected.** Before re-running, this
 > document said the detected/not-detected split was "not expected to change", on the
@@ -200,26 +203,37 @@ Re-run 2026-10-04 with the blocking and persistence delays in place. 77 points:
 > conditions are detectable at all. See "Why that case was lost" below. The earlier run
 > is kept at `results/ndz_sweep_PRE_PICKUP_DELAY.mat`.
 
-| Qf | detected | detection time | was |
+| Qf | detected | detection time |
+|---|---|---|
+| 0.5 | 11/11 | 68.5–147.3 ms |
+| **1.0** | **11/11** | **68.5–148.1 ms** |
+| 1.5 | 11/11 | 68.6–187.2 ms |
+| 2.0 | 11/11 | 68.7–284.8 ms |
+| 2.5 | 10/11 | 68.9–341.8 ms |
+| 3.0 | 9/11 | 69.0–175.6 ms |
+| 3.5 | 9/11 | 69.1–641.6 ms |
+
+Three sweeps are kept, so the effect of the setting is on the record:
+
+| `t_pickup` | undetected | detection range | file |
 |---|---|---|---|
-| 0.5 | 11/11 | 118.6–197.4 ms | 11/11 |
-| **1.0** | **11/11** | **118.5–198.1 ms** | 11/11 |
-| 1.5 | 11/11 | 118.7–237.1 ms | 11/11 |
-| 2.0 | 11/11 | 118.8–334.9 ms | 11/11 |
-| 2.5 | 10/11 | 118.9–391.8 ms | 10/11 |
-| 3.0 | 9/11 | 119.0–226.3 ms | 9/11 |
-| 3.5 | **8/11** | 119.1–255.4 ms | 9/11 |
+| none | 5 of 77 | 18.4–591.5 ms | `ndz_sweep_PRE_PICKUP_DELAY.mat` — but the relay trips at startup |
+| 0.10 s | **6 of 77** | 118.5–391.8 ms | `ndz_sweep_PICKUP_100MS.mat` |
+| **0.05 s** | **5 of 77** | 68.5–641.6 ms | `ndz_sweep.mat` — current |
 
-**At the standard's Qf = 1 the non-detection zone is still empty** across the full ±50%
-reactive range, so SC5 is unaffected. All six failures sit at Qf ≥ 2.5, well above the
-test condition, and at ΔQ between −0.2 and 0 — the detuning that most nearly cancels the
-phase SFS demands.
+**At the standard's Qf = 1 the non-detection zone is empty** across the full ±50%
+reactive range, so SC5 is unaffected. All five failures sit at Qf ≥ 2.5, well above the
+test condition, and at ΔQ of −0.1 or 0 — the detuning that most nearly cancels the phase
+SFS demands.
 
-### Why that case was lost
+### Why `t_pickup` is 0.05 s and not 0.1 s
 
-Qf = 3.5, ΔQ = −0.2 does not run away at all. The frequency falls rather than rises
-(ending at 46.98 Hz, never exceeding 50.00) and then **oscillates**, dipping below the
-47 Hz threshold repeatedly:
+`t_pickup` was briefly set to 0.1 s, and that cost a detection: **Qf = 3.5, ΔQ = −0.2**
+went undetected. The reason is worth recording, because it is not a timing shift.
+
+That condition does not run away at all. The frequency falls rather than rises (ending
+at 46.98 Hz, never exceeding 50.00) and then **oscillates**, dipping below the 47 Hz
+threshold repeatedly:
 
 ```
 excursions below 47 Hz, after the island at t = 1.0 s
@@ -229,21 +243,25 @@ excursions below 47 Hz, after the island at t = 1.0 s
   2.611 - 2.697 s    85.1 ms
 ```
 
-A limit cycle: period ~340 ms, each excursion 85.1 ms. The old relay latched on the
-first dip at t = 1.592 s, which is exactly the 591.5 ms previously recorded. The new
-relay requires 100 ms of continuous out-of-band time, and each dip is 85.1 ms, so it
-never confirms.
+A limit cycle: period ~340 ms, each excursion 85.1 ms. A 100 ms pickup never confirms
+those dips, so the condition went undetected. **A 50 ms pickup confirms on the first
+dip** and the case is detected at 641.6 ms.
 
-**This is the relay behaving correctly, not a regression.** Tripping on an 85 ms dip in
-an oscillation is precisely what a persistence delay exists to prevent, and the same
-behaviour is what stops a 30° phase jump tripping the plant. But it is an honest cost:
-the non-detection zone is marginally larger than it was.
+So the setting sits between two measured bounds, and they are not close together:
 
-The case is also highly sensitive to the setting — 85.1 ms against a 100 ms pickup. A
-`t_pickup` of 0.05 s would recover it and give a 148 ms headline, while still clearing
-the worst measured disturbance (20.7 ms at 60°) by 2.4×. 0.1 s was chosen for the larger
-disturbance margin. **The trade is one parameter and is worth stating in the report
-rather than hiding.**
+```
+    20.7 ms  <  t_pickup  <  85.1 ms
+       |                        |
+  worst disturbance        shortest out-of-band
+  the plant must           excursion that must
+  ride through             still be caught
+  (60 deg phase jump)      (Qf 3.5 limit cycle)
+```
+
+0.05 s sits near the middle: 2.4× above the disturbance floor, 1.7× below the detection
+ceiling. 0.1 s was outside the window and cost a detection. **Anything above 85 ms
+begins trading coverage for disturbance margin**, which is the trade to state in the
+report — the window is real, it was measured, and the setting is inside it.
 
 ---
 
@@ -254,7 +272,7 @@ rather than hiding.**
 | **Qf = 1 numeric value** | **asserted** — confirm against the full AS/NZS IEC 62116:2020 text (#7) |
 | **Gain condition vs IEEE 1547.1** | **asserted** — the formula `kSFS > 4Qf/(πf_n)` is used throughout; confirm the derivation. Note the sweep independently corroborates it (§5) |
 | **Frequency thresholds vs the standard itself** | **verified** against a network operator document; confirm against AS/NZS 4777.2:2020 Table 4.1/4.2 directly |
-| **Re-run the NDZ sweep** | **done 2026-10-04** — 71/77 detected, one case lost at Qf = 3.5 |
+| **Re-run the NDZ sweep** | **done 2026-10-04** at `t_pickup` = 0.05 s — 72/77 detected, full coverage restored |
 | **Does drift rate scale with `pp.Ts`?** | unchecked. If it does, 98 ms is partly an artefact of the 10 kHz control rate. Testable: re-run `make_fig5` at `pp.Ts` = 5e-5 and 2e-4 |
 | **Automatic reconnection (60 s)** | required (#4), not implemented. The latch is currently permanent. Scope confirmation pending with the product owner. Note it composes correctly with what exists: after a trip the current goes to zero and the PCC voltage collapses, so the reconnect timer can never start while the island is live — it is not possible to reconnect into an island |
 | **Three-phase demonstration** | §4 defends the result analytically. Physical integration depends on the `Iq_ref` interface, §8 |

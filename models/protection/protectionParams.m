@@ -100,12 +100,19 @@ pp.t_trip_max = 2.0;     % s, success criterion SC5
 %           Without it a legitimate grid disturbance trips the relay: a
 %           30 deg phase jump - the SC4 stimulus, which the PLL is specified
 %           to ride through - drives the estimate to 60 Hz for 12.4 ms, and
-%           a 60 deg jump for 20.7 ms. 100 ms gives ~5x margin on the worst
-%           of those and still leaves a 10x margin against t_trip_max.
+%           a 60 deg jump for 20.7 ms. 50 ms gives 2.4x margin on the worst
+%           of those, which is the binding requirement.
+%
+%           It was briefly set to 100 ms. That is a wider disturbance margin
+%           but it costs a detection: at Qf = 3.5, dQ = -0.2 the frequency
+%           does not run away, it oscillates, dipping below 47 Hz for 85.1 ms
+%           every ~340 ms. A 100 ms pickup never confirms those dips and the
+%           case goes undetected; 50 ms catches them. Outside the standard's
+%           Qf = 1, so it was a robustness choice, not a compliance one.
 %
 %   Both are measured, not assumed; the probes are in design-record.md.
 pp.t_arm    = 0.5;       % s, relay blocked before this
-pp.t_pickup = 0.1;       % s, out-of-band must persist this long to latch
+pp.t_pickup = 0.05;      % s, out-of-band must persist this long to latch
 
 % --- Simulation timing ---------------------------------------------------
 pp.t_island = 1.0;       % s, breaker opens (settle first, then island)
