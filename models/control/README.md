@@ -12,7 +12,7 @@ addpath(genpath('models'));   % uses invLib/invParams (inverter) and windLib/win
 
 | file | what it is |
 |---|---|
-| `srfPllLib.slx` | **the SRF-PLL block.** In: `v_abc`. Out: `theta` (same `atan2(v_beta, v_alpha)` convention as `GridAngle_ideal`), `f_hz`, `vd`. Mask: `Ts`, `f0`, `fbw`, `zeta`. Drop-in replacement for `GridAngle_ideal`. |
+| `srfPllLib.slx` | **the SRF-PLL block.** In: `v_abc`. Out: `theta` (same `atan2(v_beta, v_alpha)` convention as `GridAngle_ideal`), `f_hz`, `vd`. Mask: `Ts`, `f0`, `fbw`, `zeta`, `theta0` (starting angle, default 0). Drop-in replacement for `GridAngle_ideal`. |
 | `srf_pll_test.slx` | stand-alone test bench: synthetic 400 V / 50 Hz grid with frequency step, phase jump, sag and 5th/7th harmonics (`srcp` in the model workspace) |
 | `invPlantSw_BEFORE_noPLL.slx` | Duc's switched inverter, `GridAngle_ideal` (red), grid with 5 % 5th + 3 % 7th |
 | `invPlantSw_AFTER_SRFPLL.slx` | same model, `SRF_PLL` (green) drives CurrentLoop / Modulator_SVPWM / Telemetry; `GridAngle_ideal` kept only as a scope reference |
@@ -39,6 +39,13 @@ In the inverter, grid-current THD at rated current (window 0.11–0.15 s):
 
 On a clean grid the PLL costs nothing. On a distorted grid `atan2` of the PCC voltage wobbles ~10° pk-pk at
 300 Hz and the current loop copies that into the current; the PLL filters it out.
+
+Starting angle (`theta0`, added 5 Oct 2026): the angle estimate starts at `theta0`. Set it to the grid's
+angle at t = 0, which is -pi/2 for the `invParams` grid, so the PLL starts locked. With the default 0 it starts
+90 deg off and pulls in. That is harmless on a stiff grid, but on the SCR-3 grid with the 250 kW site load in
+the integration the pull-in rode the +/-10 Hz clamp for ~0.1 s and charged the DC bus to 787 V (12.5 %).
+With -pi/2 the peak was 712.5 V (1.8 %), weak_grid passes, and THD and PF are unchanged. The default is 0, so the test
+benches and the numbers above are unchanged.
 
 Open item (not the PLL): Id settles at ~297 A against a 306 A reference in both versions — present in the
 original inverter model.
