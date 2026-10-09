@@ -4,6 +4,7 @@ function [res, out] = runIntegration(names, opts)
 %   res = runIntegration()                    every scenario in intScenarios
 %   res = runIntegration(["nominal","cloud"])
 %   res = runIntegration("nominal", Model="myIntSystem", Save=false)
+%   res = runIntegration("weak_grid", Set={"sfs.cf0",0,"sfs.kSFS",0})   extra xp overrides
 %
 % Returns one metrics struct per scenario (see analyseIntegration) and saves
 % each run's logs to <results>/<name>.mat for plotIntegration.
@@ -20,6 +21,7 @@ arguments
     opts.Model    (1,1) string  = "intSystem"
     opts.Parallel (1,1) logical = false
     opts.Save     (1,1) logical = true
+    opts.Set      cell          = {}     % extra {"field.path", value} overrides, every scenario
 end
 
 P   = intPaths();
@@ -29,6 +31,7 @@ if mdl ~= "intSystem", P.results = fullfile(P.results, mdl); end
 if ~bdIsLoaded(mdl), load_system(fullfile(P.here, [mdl '.slx'])); end
 
 scn = intScenarios(names);
+for k = 1:numel(scn), scn(k).set = [scn(k).set, opts.Set]; end
 in  = Simulink.SimulationInput.empty;
 for k = 1:numel(scn)
     in(k) = makeInput(mdl, scn(k));
@@ -56,6 +59,13 @@ for k = 1:numel(out)
         continue
     end
     r = analyseIntegration(out(k).logsout, scn(k));
+    % Scenarios carry different fields (only protection runs have r.prot): pad, then join.
+    % setdiff gives a column; transpose it, or `for` runs once on an empty 0x1 cell.
+    if ~isempty(res)
+        for f = setdiff(fieldnames(res), fieldnames(r))', r.(f{1}) = []; end
+        for f = setdiff(fieldnames(r), fieldnames(res))', [res.(f{1})] = deal([]); end
+        r = orderfields(r, res);
+    end
     res = [res r]; %#ok<AGROW>
     if opts.Save
         logsout = out(k).logsout; s = scn(k); %#ok<NASGU>
@@ -81,7 +91,16 @@ wp.w_init      = wp.lam_opt*wp.v_init/wp.R;
 wp.V_rect_init = 1.35*(wp.p*wp.w_init*wp.lam_pm)*sqrt(3)/sqrt(2);
 wp.d_init      = 1 - wp.V_rect_init/wp.V_dc;
 
+% Scenario overrides of intParams, e.g. {"trip.t", 0.5, "pcc.grid.t", 0.5}:
+% breaker and trip timings live in xp, so a scenario sets them here.
+xp = intParams();
+for j = 1:2:numel(s.set)
+    f  = strsplit(char(s.set{j}), '.');
+    xp = setfield(xp, f{:}, s.set{j+1}); %#ok<SFLD>
+end
+
 in = Simulink.SimulationInput(mdl);
+in = in.setVariable('xp', xp, 'Workspace', mdl);
 % The settings the scripts rely on, forced here so a model that saved them
 % differently still produces the same logs.
 in = in.setModelParameter('StopTime', num2str(s.T), ...
