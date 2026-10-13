@@ -265,6 +265,45 @@ report — the window is real, it was measured, and the setting is inside it.
 
 ---
 
+### 6a. The result on the full three-phase plant
+
+Integration wired the relay and the SFS perturbation into `intSystem_aqibPLL` on
+2026-10-09. The relay is **linked** from `protectionLib`, not copied, so the rig and the
+integrated model share one definition.
+
+| quantity | rig (single-phase) | integrated plant |
+|---|---|---|
+| detection, matched island | 148.1 ms | **65.6 ms** |
+| frequency estimate | zero crossings, once per cycle | SRF-PLL, continuous |
+| `t_arm` | 0.5 s | 0.3 s (island forms at 0.5 s, not 1.0 s) |
+| `t_pickup` | 0.05 s | 0.05 s |
+| nuisance trips, nominal and weak grid | — | none |
+
+**Detection is faster on the plant than on the rig**, which §4 predicted: the rig's
+estimator updates once per cycle and so carries up to 20 ms of quantisation that a
+continuous PLL estimate does not.
+
+**Two settings differ from the rig, both for stated reasons.**
+
+`t_arm` was *lowered* to 0.3 s rather than raised. The rig islands at 1.0 s and the
+integrated model at 0.5 s, so 0.3 s still clears the 170 ms measured in §2 while leaving
+room before the event.
+
+A **one-cycle low-pass (τ = 20 ms) was added on the frequency feeding SFS**, which the
+rig does not have. Integration found that feeding the raw PLL estimate — which ripples
+±1.5 Hz at 100–300 Hz on a weak grid — straight into SFS destabilised the SCR-3 run.
+
+That filter is on the *perturbation* path, not the relay path, and the distinction
+matters: `t_pickup` stops the **relay** acting on ripple, but SFS reads the frequency
+continuously and amplifies it through positive feedback, so the persistence delay does
+nothing for it. The rig could not have shown this, because its once-per-cycle estimator
+is itself a filter.
+
+**The startup problem was also closed at source.** Aqib set `SRF_PLL theta0 = −π/2` so
+the loop starts at the grid angle. The anti-phase equilibrium described in §2 remains a
+property of the loop and can still be reached if lock is lost during operation, so
+`t_arm` is now defence in depth rather than the primary fix.
+
 ## 7. Open items
 
 | item | status |
@@ -275,7 +314,7 @@ report — the window is real, it was measured, and the setting is inside it.
 | **Re-run the NDZ sweep** | **done 2026-10-04** at `t_pickup` = 0.05 s — 72/77 detected, full coverage restored |
 | **Does drift rate scale with `pp.Ts`?** | unchecked. If it does, 98 ms is partly an artefact of the 10 kHz control rate. Testable: re-run `make_fig5` at `pp.Ts` = 5e-5 and 2e-4 |
 | **Automatic reconnection (60 s)** | required (#4), not implemented. The latch is currently permanent. Scope confirmation pending with the product owner. Note it composes correctly with what exists: after a trip the current goes to zero and the PCC voltage collapses, so the reconnect timer can never start while the island is live — it is not possible to reconnect into an island |
-| **Three-phase demonstration** | §4 defends the result analytically. Physical integration depends on the `Iq_ref` interface, §8 |
+| **Three-phase demonstration** | **CLOSED 2026-10-09.** Integration ran the relay and SFS on the full three-phase plant: matched island detected in **65.6 ms**, no nuisance trip in nominal or weak-grid runs. §6a |
 
 ---
 
@@ -285,9 +324,9 @@ Verified against Duc's build scripts and Aqib's PLL library on 2026-10-03.
 
 | interface | state | owner |
 |---|---|---|
-| `Iq_ref` — SFS perturbation input | **exists and is drivable.** Genuine inport on `invPlantAvg` (Port 2) and `invPlantSw` (Port 3), tracked by `Vq = PI(Iq_ref − Iq) + Vgq + ωL·Id`. `ip.Iq_ref = 0` is a default value, not a hardwire | Duc — **contested**, see below |
+| `Iq_ref` — SFS perturbation input | **RESOLVED 2026-10-05.** SFS owns it; power factor stays at unity underneath (`ip.Iq_ref` = 0), so nothing else needs it today. Recorded in `docs/decisions.md` | SFS |
 | `f_hz` — frequency estimate | **exists.** `srfPllLib/SRF_PLL` outputs `theta`, `f_hz`, `vd`; mask `Ts` = 1e-4 (matches `pp.Ts`), `f0` = 50, `fbw` = 25, `zeta` = 0.707. Clamped to 50 ± 10 Hz, so the 47/52 band sits inside it | Aqib — available, no action needed |
-| `enable` — stopping signal | **missing** on `invPlantAvg` and `invPlantSw`. Exists only on `invBridge120` ("1 = gates live, 0 = bridge blocked"). Without it there is no way to make the inverter cease energising on a trip | Duc — **requested** |
+| `enable` — stopping signal | **RESOLVED 2026-10-09**, in integration rather than in the inverter models. A trip now blocks all six bridge gates (`gates × enable`), zeroes the references and stops both boosts | integration |
 
 **`Iq_ref` is contested.** `invParams.m:190` reserves it for power factor: *"Held at zero
 (unity power factor) until somebody owns the Q reference — AS/NZS 4777.2 has power-factor
