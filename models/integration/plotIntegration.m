@@ -1,19 +1,26 @@
-function files = plotIntegration(names)
+function files = plotIntegration(names, opts)
 %PLOTINTEGRATION  One figure per saved scenario run, PNG into ../results/figures.
 %
 %   files = plotIntegration()                  every ../results/*.mat
 %   files = plotIntegration(["nominal","cloud"])
+%   files = plotIntegration([], Model="intSystem_aqibPLL")   runs saved by runIntegration(..., Model=)
 %
 % Four panels: power flow (from the energy meters), the DC bus against its
 % +/-1 % and +/-5 % bands, the grid current at the end of the window, and the
 % harmonic spectrum with THD.
 %
 
+arguments
+    names = []
+    opts.Model (1,1) string = "intSystem"
+end
 P      = intPaths();
 resDir = P.results;
+% same rule as runIntegration: any model other than the reference saves to results/<model>/
+if opts.Model ~= "intSystem", resDir = fullfile(resDir, opts.Model); end
 figDir = fullfile(resDir, 'figures');
 if ~isfolder(figDir), mkdir(figDir); end
-if nargin == 0 || isempty(names)
+if isempty(names)
     d = dir(fullfile(resDir, '*.mat'));  names = erase(string({d.name}), ".mat");
 end
 xp = intParams();

@@ -30,6 +30,9 @@ addpath(p.here, p.pv, p.wind, p.inverter);
 % Aqib's SRF-PLL library (models/control, on main from 27 Sep)
 p.control = fullfile(p.models, 'control');
 if isfolder(fullfile(p.control, 'srf_pll')), addpath(fullfile(p.control, 'srf_pll')); end
+% Redhwan's protectionLib (AntiIslandingRelay), on main from 4 Oct
+p.protection = fullfile(p.models, 'protection');
+if isfolder(p.protection), addpath(p.protection); end
 
 % Keep Simulink's caches out of OneDrive (same idea as TestHarness/setupHarness).
 cache = fullfile(getenv('LOCALAPPDATA'), 'IntegrationSandbox', 'cache');

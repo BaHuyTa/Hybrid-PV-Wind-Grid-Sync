@@ -175,3 +175,21 @@ Recorded so they read as decisions rather than gaps:
   bidirectional converter and an energy-management layer.
 - **No pitch control.** Fixed β = 0, stall-regulated. See `wind-model-spec.md`.
 - **No two-mass drivetrain.** Single lumped inertia. No criterion needs the torsional mode.
+
+---
+
+## 2026-10-05 — Anti-islanding in the integration: SFS owns `Iq_ref`; trip blocks the gates
+
+**Decided (Henry).** In the integrated model SFS writes the current reference, in Redhwan's
+rotation form (Id = |I|cos θ, Iq = |I|sin θ, θ = (π/2)·cf), between the DC-link loop and the
+trip gate. Power factor stays at unity underneath it (`ip.Iq_ref` = 0), so nothing else needs
+`Iq_ref` today. A trip blocks all six bridge gates (gates × enable) as well as zeroing the
+references and stopping both boosts. Redhwan's relay is linked from `protectionLib`, OR'd with
+the integration's stand-in trip so the trip-path test keeps working.
+
+**Integration settings that differ from the rig:** `t_arm` = 0.3 s (our island forms at 0.5 s);
+SFS acts on a one-cycle-smoothed frequency (τ = 20 ms) and starts at `t_arm`. Fed Aqib's raw PLL
+estimate, SFS destabilised the SCR-3 grid; the rig's once-per-cycle estimator never showed it.
+
+**Result (5 Oct, copy of `intSystem_aqibPLL`):** matched island tripped by the relay alone in
+65.6 ms (SC5 limit 2 s); no nuisance trip in nominal or weak-grid runs.

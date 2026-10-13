@@ -7,7 +7,8 @@ function scn = intScenarios(names)
 % Fields: name, T (stop time), G (@(t) W/m^2), v_wind (@(t) m/s), T_cell (degC),
 % v_wind0 (the wind speed the turbine starts settled at), window ([t0 t1],
 % where steady-state metrics are read), block (optional {path, param, value}
-% overrides, relative to the model root) and why (one line).
+% overrides, relative to the model root), set (optional {"field.path", value}
+% overrides of intParams, e.g. breaker and trip times) and why (one line).
 
 s = struct([]);
 
@@ -56,9 +57,42 @@ s(end).window = [0.8 1.0];
 % though the same override works on Duc's standalone model.
 s(end).block  = {"Inverter/GridSide/Grid", "impedance_option", "1"};
 
+% ---- Protection path (trip + PCC breakers). The trip is a stand-in Step until
+% Redhwan's 47/52 Hz trip signal is wired in. Field "set" overrides intParams.
+s(end+1).name = "trip";
+s(end).why    = "Nominal weather; the trip fires at 0.5 s. Inverter current, PV boost and wind boost must all stop, and the bus must stay put.";
+s(end).T      = 0.8;
+s(end).G      = @(t) 1000 + 0*t;
+s(end).v_wind = @(t) 8 + 0*t;
+s(end).v_wind0 = 8;
+s(end).window = [0.3 0.5];            % steady, before the trip
+s(end).set    = {"trip.t", 0.5};
+
+s(end+1).name = "island";
+s(end).why    = "Matched RLC load in, site load out; the grid breaker opens at 0.5 s and the trip fires 0.1 s later (Redhwan's SFS: 98 ms).";
+s(end).T      = 0.8;
+s(end).G      = @(t) 1000 + 0*t;
+s(end).v_wind = @(t) 8 + 0*t;
+s(end).v_wind0 = 8;
+s(end).window = [0.3 0.5];            % steady, grid-connected
+s(end).set    = {"pcc.rlc.open0", 0, "pcc.site.open0", 1, "pcc.grid.t", 0.5, "trip.t", 0.6};
+
+% ---- Anti-islanding on its own (5 Oct): SFS + Redhwan's relay, NO stand-in trip.
+% Needs a model with SFS and the relay (intSystem_aqibPLL); on the reference
+% intSystem nothing trips, which is the passive-blind result of "island".
+s(end+1).name = "island_sfs";
+s(end).why    = "Matched RLC load in, site load out; the grid breaker opens at 0.5 s and nothing else: SFS must push f out of 47-52 Hz and the relay must trip by itself (limit 2 s).";
+s(end).T      = 1.0;
+s(end).G      = @(t) 1000 + 0*t;
+s(end).v_wind = @(t) 8 + 0*t;
+s(end).v_wind0 = 8;
+s(end).window = [0.3 0.5];            % steady, grid-connected
+s(end).set    = {"pcc.rlc.open0", 0, "pcc.site.open0", 1, "pcc.grid.t", 0.5};
+
 [s.T_cell] = deal(25);
 for k = 1:numel(s)
     if isempty(s(k).block), s(k).block = {}; end
+    if isempty(s(k).set),   s(k).set   = {}; end
 end
 
 if nargin && ~isempty(names)
