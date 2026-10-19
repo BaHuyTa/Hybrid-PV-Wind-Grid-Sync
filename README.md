@@ -38,6 +38,7 @@ what was deliberately left out.
 | PLL re-lock after 30° phase jump | < 100 ms |
 | Islanding detect + disconnect | < 2 s |
 | Stable operation | down to SCR = 3 |
+| DC-link peak during a grid fault ride-through | < 800 V (+15%); output back within 1 s |
 
 ## Layout
 

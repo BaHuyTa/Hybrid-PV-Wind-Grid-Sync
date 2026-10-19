@@ -193,3 +193,26 @@ estimate, SFS destabilised the SCR-3 grid; the rig's once-per-cycle estimator ne
 
 **Result (5 Oct, copy of `intSystem_aqibPLL`):** matched island tripped by the relay alone in
 65.6 ms (SC5 limit 2 s); no nuisance trip in nominal or weak-grid runs.
+
+---
+
+## 2026-10-19 — Fault ride-through gets its own DC-link limit: 800 V
+
+**Decided (Henry).** During a grid fault ride-through the DC link may peak at **800 V
+(+15 %)**; output must be back within 1 s of clearing. The 5 % / 200 ms criterion stays for
+normal disturbances (cloud, gust, load step).
+
+**Why a separate limit.** In a dip (AEMO short-duration undervoltage test, 50 V for 220 ms,
+as used for AS/NZS 4777.2) the inverter can export only ~23 kW while PV and wind still
+deliver ~114 kW. The surplus charges the bus capacitor until curtailment pulls PV back,
+which takes ~30 ms. Staying inside 735 V would allow only ½·0.044·(735² − 700²) ≈ 1.1 kJ,
+about 12 ms of that surplus, so 5 % cannot be met by tuning; it would need a brake chopper
+or a far larger capacitor, both out of scope. In a fault the test is withstand and recovery,
+not regulation. 800 V leaves margin under typical 900 V DC-link capacitor ratings.
+
+**Result it is judged against (sandbox, 14 Oct, not yet in the repo):** with PV curtailment,
+grid dip peak 771 V, full power back by ~0.95 s, no trip.
+
+**Drawing.** `docs/single-line-diagram.png` now shows the DC-link capacitor as the bus, with
+the extra line across it removed (product owner, W7 and W10: "the capacitor itself
+represents the bus").
