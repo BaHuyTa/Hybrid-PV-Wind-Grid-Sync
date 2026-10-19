@@ -46,7 +46,11 @@ add('Simscape logging off', strcmp(get_param(m,'SimscapeLogType'),'none'), get_p
 % (Inverter/SRF_PLL, decided 2 Oct). Each gets its own checks below.
 pllName = "PLL_standin";
 if ~exists([m '/Inverter/PLL_standin']) && exists([m '/Inverter/SRF_PLL']), pllName = "SRF_PLL"; end
-need = ["PV","Wind","Inverter","DCBus","DCLinkLoop_standin","Meters", ...
+% The DC-link loop block: Henry renamed it "DC Bus Controller" on 19 Oct; older builds
+% still call it DCLinkLoop_standin. Either name passes; everything below uses dcName.
+dcName = "DCLinkLoop_standin";
+if ~exists([m '/DCLinkLoop_standin']) && exists([m '/DC Bus Controller']), dcName = "DC Bus Controller"; end
+need = ["PV","Wind","Inverter","DCBus",dcName,"Meters", ...
         "Inverter/" + pllName,"Inverter/GridAngle_ideal","PV/I_pv"];
 for b = need
     add("Block exists: " + b, exists([m '/' char(b)]), '');
@@ -70,7 +74,7 @@ sm = find_system([m '/DCBus'], 'BlockType','Sum');
 add('DCBus: sum signs ++- (pv, wind, inv)', numel(sm) == 1 && contains(strrep(get_param(sm{1},'Inputs'),'|',''), '++-'), tryGet(sm,'Inputs'));
 
 % -- stand-ins ----------------------------------------------------------------------
-pid = find_system([m '/DCLinkLoop_standin'], 'MaskType','PID 1dof');   % any PID block, whatever it's named
+pid = find_system([m '/' char(dcName)], 'MaskType','PID 1dof');   % any PID block, whatever it's named
 okPI = ~isempty(pid) && abs(ev(get_param(pid{1},'P')) - xp.dc.Kp) < 1e-6 ...
        && abs(ev(get_param(pid{1},'I')) - xp.dc.Ki) < 1e-6;
 add('DC loop PI gains = xp.dc.Kp / Ki', okPI, sprintf('want %.2f / %.1f', xp.dc.Kp, xp.dc.Ki));
@@ -124,13 +128,16 @@ add('Inverter Iq_ref comes from TripGate out 2', isSrc([m '/Inverter'], 3, 'Trip
 % In 1: the DC loop directly, or through the SFS rotation. In 3: trip_cmd directly, or
 % max(trip_cmd, relay) once Redhwan's relay is in (5 Oct).
 tripFromOr = isSrc([m '/TripGate'], 3, 'trip_or', 1) && isSrc([m '/trip_or'], 1, 'trip_cmd', 1);
-add('TripGate takes the DC loop, Iq_ref, the trip', (isSrc([m '/TripGate'], 1, 'DCLinkLoop_standin', 1) ...
+add('TripGate takes the DC loop, Iq_ref, the trip', (isSrc([m '/TripGate'], 1, char(dcName), 1) ...
     || isSrc([m '/TripGate'], 1, 'SFS', 1)) && (isSrc([m '/TripGate'], 3, 'trip_cmd', 1) || tripFromOr), '');
-add('PV has inport 3 "enable"', exists([m '/PV/enable']) && strcmp(get_param([m '/PV/enable'],'Port'),'3'), '');
+% PV's enable is found by NAME, like Wind's: port 3 in the lab-manual build, port 1 since
+% Henry reordered the PV inports (19 Oct).
+pvEn = 0;  if exists([m '/PV/enable']), pvEn = str2double(get_param([m '/PV/enable'],'Port')); end
+add('PV has an inport "enable"', pvEn > 0, sprintf('port %d', pvEn));
 mc = find_system([m '/PV'], 'SearchDepth',1, 'Name','MPPT Controller');
 add('MPPT Controller gates its PWM with enable', ~isempty(mc) && exists([mc{1} '/enable']) ...
     && ~isempty(find_system(mc{1}, 'SearchDepth',1, 'BlockType','Product')), '');
-add('PV enable comes from TripGate run', isSrc([m '/PV'], 3, 'TripGate', 3), srcName([m '/PV'], 3));
+add('PV enable comes from TripGate run', pvEn > 0 && isSrc([m '/PV'], pvEn, 'TripGate', 3), srcName([m '/PV'], max(pvEn,1)));
 % Wind's enable is found by NAME: it is port 3 in the sandbox, port 2 in Henry's build.
 we = find_system([m '/Wind'], 'SearchDepth',1, 'BlockType','Inport', 'Name','enable');
 okW = false;  infoW = 'no inport "enable" in Wind';
@@ -172,7 +179,7 @@ add('SiteLoad reactive power unit is var (A*V), like xp.pcc.site.Q', exists(sl) 
 if pllName == "SRF_PLL"
 fprintf('\n== %s: anti-islanding (SFS + relay) and gate enable ==\n', m);
 sf = [m '/SFS'];
-add('SFS rotates the DC-loop and Iq refs into TripGate', exists(sf) && isSrc(sf, 1, 'DCLinkLoop_standin', 1) ...
+add('SFS rotates the DC-loop and Iq refs into TripGate', exists(sf) && isSrc(sf, 1, char(dcName), 1) ...
     && isSrc(sf, 2, 'Iq_ref', 1) && isSrc([m '/TripGate'], 1, 'SFS', 1) && isSrc([m '/TripGate'], 2, 'SFS', 2), '');
 add('SFS takes f_hz from the Inverter (out 4)', exists(sf) && isSrc(sf, 3, 'Inverter', 4), srcName(sf, 3));
 okG = exists([sf '/kSFS']) && ev(get_param([sf '/kSFS'],'Gain')) == xp.sfs.kSFS ...
