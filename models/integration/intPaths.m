@@ -27,6 +27,8 @@ end
 p.wind = fullfile(p.models, 'wind');
 p.inverter = fullfile(p.models, 'inverter');
 addpath(p.here, p.pv, p.wind, p.inverter);
+% Real-day weather profiles (19 Oct): gullenProfile + its CSV
+if isfolder(fullfile(p.here, 'profiles')), addpath(fullfile(p.here, 'profiles')); end
 % Aqib's SRF-PLL library (models/control, on main from 27 Sep)
 p.control = fullfile(p.models, 'control');
 if isfolder(fullfile(p.control, 'srf_pll')), addpath(fullfile(p.control, 'srf_pll')); end

@@ -88,6 +88,8 @@ r.pass_dev  = r.dev_pct < 5;
 tg  = (0:1e-3:s.T)';
 ev  = unique([0; tg(find(diff(s.G(tg)) ~= 0 | diff(s.v_wind(tg)) ~= 0) + 1)]);
 ev  = ev(ev < tNorm);
+% A real-day profile changes weather every millisecond: no step events, start-up only.
+if isfield(s, 'profile') && s.profile, ev = 0; end
 vf  = movmean(v, round(1e-3/median(diff(t))));
 band = 0.01*xp.Vdc_ref;
 r.events   = ev';

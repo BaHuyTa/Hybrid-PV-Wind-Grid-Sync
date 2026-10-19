@@ -90,6 +90,8 @@ wp.v_init      = s.v_wind0;
 wp.w_init      = wp.lam_opt*wp.v_init/wp.R;
 wp.V_rect_init = 1.35*(wp.p*wp.w_init*wp.lam_pm)*sqrt(3)/sqrt(2);
 wp.d_init      = 1 - wp.V_rect_init/wp.V_dc;
+% Time-compressed profile runs scale the rotor inertia with the time (intScenarios).
+wp.J           = wp.J * s.Jscale;
 
 % Scenario overrides of intParams, e.g. {"trip.t", 0.5, "pcc.grid.t", 0.5}:
 % breaker and trip timings live in xp, so a scenario sets them here.

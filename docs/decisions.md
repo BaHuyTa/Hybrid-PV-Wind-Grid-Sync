@@ -252,3 +252,20 @@ is thin. Recorded, not actioned.
 
 **Open:** wind is not curtailed; a deeper or longer dip that leaves export below wind power would
 need it.
+
+---
+
+## 2026-10-19 — Case studies on a real measured day
+
+**Decided (Henry).** The product owner's W10 request is answered with a real day, not a made-up
+profile. The source is AEMO 5-minute SCADA for the Gullen Range solar and wind farms (NSW),
+which share a site and therefore the same weather. The day is **6 Oct 2026, 06:00 to 14:00**,
+picked by scoring 1 Sep to 17 Oct for cloud variability, wind range, rating overlap and no
+self-curtailment. It is scaled to our plant, compressed 5 min → 50 ms, and run at four site
+loads: 50, 150 and 250 kW, plus 250 kW shed at 10:00. The turbine inertia is scaled 1/60 in
+these runs only, so the rotor keeps up with the compressed wind.
+
+**Result:** all four pass. Total Power peaks at 140 kW, so this day never needs curtailment.
+The load level only moves the grid import or export. The shed is the one transient: PLL
+41 to 60 Hz for 16.5 ms in total, under the relay's 50 ms pickup, so no trip.
+Details: `models/integration/results/RESULTS.md`, `models/integration/profiles/README.md`.

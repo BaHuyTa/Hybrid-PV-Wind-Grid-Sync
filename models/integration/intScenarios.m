@@ -3,6 +3,7 @@ function scn = intScenarios(names)
 %
 %   scn = intScenarios()            all of them
 %   scn = intScenarios("cloud")     just the named ones
+%   scn = intScenarios("day")       the four real-day profile runs (not in "all": ~25 min each)
 %
 % Fields: name, T (stop time), G (@(t) W/m^2), v_wind (@(t) m/s), T_cell (degC),
 % v_wind0 (the wind speed the turbine starts settled at), window ([t0 t1],
@@ -106,14 +107,46 @@ s(end).set    = {"flt.R", 0.024, "flt.t", 0.5, "flt.dur", 0.22};
 s(end).block  = {"Inverter/GridSide/Grid", "impedance_option", "1", ...
                  "Inverter/GridSide/Grid", "SShortCircuit", "1.5e6"};   % SCR 10 x 150 kVA
 
+% ---- A real day (19 Oct). Product owner, W10: a measured wind/solar profile instead
+% of steps, the site load at min / mid / max, load shedding mid-run, and a comparison.
+% Weather: Gullen Range (NSW) solar + wind farms, 6 Oct 2026 06:00-14:00, AEMO 5-min
+% SCADA, scaled to our plant and compressed 5 min -> 50 ms (see gullenProfile). The
+% turbine inertia is scaled with it (Jscale): at H = 3 s the rotor would lag the
+% compressed wind by hours of real time; at H = 0.05 s it settles inside one sample,
+% which is all 5-minute data can resolve. Grid SCR 10 (X/R 15), so the load level
+% moves the PCC voltage. profile = true: only start-up counts as a bus disturbance.
+dp = gullenProfile();
+loads = [50 150 250];  tags = ["min","mid","max"];
+for j = 1:3
+    s(end+1).name = "day_load_" + tags(j); %#ok<AGROW>
+    s(end).why    = sprintf("Real day (Gullen NSW, 6 Oct 2026, 06:00-14:00 in %.1f s); site load %d kW.", dp.T, loads(j));
+    s(end).set    = {"pcc.site.P", loads(j)*1e3};
+end
+s(end+1).name = "day_shed";
+s(end).why    = sprintf("Real day as above, site load 250 kW shed (breaker opens) at 10:00 = %.1f s.", dp.at("10:00"));
+s(end).set    = {"pcc.site.t", dp.at("10:00")};
+for k = numel(s)-3:numel(s)
+    s(k).T = dp.T;  s(k).G = dp.Gf;  s(k).v_wind = dp.vf;  s(k).v_wind0 = dp.v(1);
+    s(k).window  = [2.6 2.7];          % 10:20-10:30 real: full sun, after the shed, 5 cycles
+    s(k).profile = true;  s(k).Jscale = 1/60;
+    s(k).block   = {"Inverter/GridSide/Grid", "impedance_option", "1", ...
+                    "Inverter/GridSide/Grid", "SShortCircuit", "1.5e6"};
+end
+
 [s.T_cell] = deal(25);
 for k = 1:numel(s)
     if isempty(s(k).block), s(k).block = {}; end
     if isempty(s(k).set),   s(k).set   = {}; end
+    if isempty(s(k).profile), s(k).profile = false; end
+    if isempty(s(k).Jscale),  s(k).Jscale  = 1; end
 end
 
 if nargin && ~isempty(names)
-    s = s(ismember([s.name], string(names)));
+    names = string(names);
+    if any(names == "day"), names = [names, [s([s.profile]).name]]; end
+    s = s(ismember([s.name], names));
+else
+    s = s(~[s.profile]);                % the long real-day runs only when asked for
 end
 scn = s;
 end

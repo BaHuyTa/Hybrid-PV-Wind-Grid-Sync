@@ -46,6 +46,38 @@ plotProtection([], Model="intSystem_aqibPLL");  plotFault([], Model="intSystem_a
 checkBuild("intSystem_aqibPLL", Fault=true)
 ```
 
+## A real day, four site-load cases (19 Oct 2026)
+
+The product owner's W10 request: a real wind and solar profile instead of steps, the site load
+at min, mid and max, load shedding mid-run, and a comparison. The weather is the Gullen Range
+solar and wind farms (NSW) on **6 Oct 2026, 06:00 to 14:00**, from AEMO 5-minute SCADA. It is
+scaled to our plant and compressed 5 min → 50 ms (4.8 s per run). Source, day selection and
+scaling: `../profiles/README.md`. The grid is SCR 10 (X/R 15), so the load level moves the PCC.
+
+| Case | Site load | Bus worst | Grid THD (10:20) | Load met by PV + wind | Trip | Verdict |
+|---|---|---|---|---|---|---|
+| day_load_min | 50 kW | 0.41 % | 1.86 % | 93.7 % (exports from ~07:00) | none | **PASS** |
+| day_load_mid | 150 kW | 0.38 % | 1.95 % | 61.0 % | none | **PASS** |
+| day_load_max | 250 kW | 0.35 % | 1.87 % | 36.8 % | none | **PASS** |
+| day_shed | 250 kW, breaker opens at 10:00 | 0.90 % (706 V at the shed) | 1.92 % | 28.3 % | none | **PASS** |
+
+- **The plant is the same in every case:** Total Power peaks at **140 kW** near noon (PV about 96 kW,
+  wind 42 kW). It stays under the 150 kVA rating, so curtailment never acts on this day. At
+  1000 W/m² our PV makes about 96 to 98 kW, not 120 kW (cell temperature and conversion losses).
+- **The load decides the grid flow:** with 50 kW the site exports up to ~90 kW from 07:00;
+  with 250 kW it imports all day.
+- **The shed is the one stress event.** Dropping 250 kW on an SCR-10 grid steps the PCC phase by
+  about 10°: the PLL swings 41 to 60 Hz for **16.5 ms** in total (relay pickup 50 ms, so no trip),
+  the bus peaks at 706 V, and the grid current stays at 307 A.
+
+Figures: `intSystem_aqibPLL/figures/Day/day_comparison.png` (the four cases side by side) and
+`day_weather.png` (the measured day that went in). Reproduce:
+
+```matlab
+runIntegration("day", Model="intSystem_aqibPLL", Parallel=true);   % 4 runs, ~45 min on 3 workers
+plotDay();
+```
+
 ---
 
 ## Earlier: the 2 Oct integration (stand-in PLL, no curtailment)
