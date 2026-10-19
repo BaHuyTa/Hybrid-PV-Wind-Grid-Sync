@@ -213,9 +213,12 @@ not regulation. 800 V leaves margin under typical 900 V DC-link capacitor rating
 **Result it is judged against (sandbox, 14 Oct, not yet in the repo):** with PV curtailment,
 grid dip peak 771 V, full power back by ~0.95 s, no trip.
 
-**Drawing.** `docs/single-line-diagram.png` now shows the DC-link capacitor as the bus, with
-the extra line across it removed (product owner, W7 and W10: "the capacitor itself
-represents the bus").
+**Drawing (revised 20 Oct, Henry).** `docs/single-line-diagram.png` shows the shared DC bus as
+two plain rails into the inverter: no capacitor symbol and no line across them. The product
+owner objected twice (W7, W10) to a line drawn in parallel with the capacitor, which reads as a
+short circuit; that line is gone. The capacitor symbol is dropped as well, to keep the drawing
+general. It also matches the model: the bus is a signal-level integrator with C = 44 mF as a
+gain (see 2026-10-02), not a physical capacitor component.
 
 ---
 
