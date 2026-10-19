@@ -50,7 +50,10 @@ if ~exists([m '/Inverter/PLL_standin']) && exists([m '/Inverter/SRF_PLL']), pllN
 % still call it DCLinkLoop_standin. Either name passes; everything below uses dcName.
 dcName = "DCLinkLoop_standin";
 if ~exists([m '/DCLinkLoop_standin']) && exists([m '/DC Bus Controller']), dcName = "DC Bus Controller"; end
-need = ["PV","Wind","Inverter","DCBus",dcName,"Meters", ...
+% The bus block: renamed "DCBus Capacitor" by Henry on 20 Oct; either name passes.
+busName = "DCBus";
+if ~exists([m '/DCBus']) && exists([m '/DCBus Capacitor']), busName = "DCBus Capacitor"; end
+need = ["PV","Wind","Inverter",busName,dcName,"Meters", ...
         "Inverter/" + pllName,"Inverter/GridAngle_ideal","PV/I_pv"];
 for b = need
     add("Block exists: " + b, exists([m '/' char(b)]), '');
@@ -66,11 +69,11 @@ sc = find_system([m '/PV'], 'SearchDepth',1, 'ReferenceBlock','nesl_utility/Solv
 add('PV: Solver Configuration uses local solver', ~isempty(sc) && strcmp(get_param(sc{1},'UseLocalSolver'),'on'), '');
 
 % -- the bus -------------------------------------------------------------------
-ig = find_system([m '/DCBus'], 'BlockType','Integrator');
+ig = find_system([m '/' char(busName)], 'BlockType','Integrator');
 add('DCBus: one integrator, IC = 700 V', numel(ig) == 1 && abs(ev(get_param(ig{1},'InitialCondition')) - 700) < 1e-9, '');
-gn = find_system([m '/DCBus'], 'BlockType','Gain');
+gn = find_system([m '/' char(busName)], 'BlockType','Gain');
 add('DCBus: gain = 1/C = 22.73', numel(gn) == 1 && abs(ev(get_param(gn{1},'Gain')) - 1/xp.C_bus) < 1e-6, tryGet(gn,'Gain'));
-sm = find_system([m '/DCBus'], 'BlockType','Sum');
+sm = find_system([m '/' char(busName)], 'BlockType','Sum');
 add('DCBus: sum signs ++- (pv, wind, inv)', numel(sm) == 1 && contains(strrep(get_param(sm{1},'Inputs'),'|',''), '++-'), tryGet(sm,'Inputs'));
 
 % -- stand-ins ----------------------------------------------------------------------
