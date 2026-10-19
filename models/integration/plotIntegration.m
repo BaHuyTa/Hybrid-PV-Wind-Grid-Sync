@@ -40,7 +40,7 @@ for nm = string(names)
     plot(E.Time, P(:,1), E.Time, P(:,2), E.Time, P(:,4), 'LineWidth', 1.2); hold on
     yline(150, ':', '150 kVA rating', 'LabelHorizontalAlignment','left');
     grid on; xlabel('t [s]'); ylabel('P [kW]'); ylim([0 max(180, max(P(:,4))*1.1)]);
-    legend('PV into bus','Wind into bus','Inverter to grid (AC)', 'Location','best');
+    legend('PV into bus','Wind into bus','Total Power', 'Location','best');
     title('Power flow (5 ms average of dE/dt)');
 
     % -- 2. DC bus ----------------------------------------------------------

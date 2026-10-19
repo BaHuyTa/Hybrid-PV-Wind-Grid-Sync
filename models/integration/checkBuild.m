@@ -4,6 +4,7 @@ function T = checkBuild(mdl, opts)
 %   T = checkBuild("intSystem")                  structure + nominal + PLL test + trip
 %   T = checkBuild("intSystem", Simulate=false)  structure only (seconds, not minutes)
 %   T = checkBuild("intSystem", Island=true)     also the island run (+~150 s)
+%   T = checkBuild("intSystem_aqibPLL", Fault=true)  also the grid_dip ride-through (+~8 min)
 %
 % Run from the folder that holds the model (models/integration in the repo).
 % Prints one PASS/FAIL line per check and returns them as a table. Part 1 reads
@@ -15,6 +16,7 @@ arguments
     mdl (1,1) string = "intSystem"
     opts.Simulate (1,1) logical = true
     opts.Island   (1,1) logical = false
+    opts.Fault    (1,1) logical = false
 end
 
 P = intPaths();
@@ -192,6 +194,16 @@ add('trip = max(trip_cmd, relay) into TripGate in 3', tripFromOr && isSrc([m '/t
 add('Inverter enable (in 4) from TripGate run', isSrc([m '/Inverter'], 4, 'TripGate', 3), srcName([m '/Inverter'], 4));
 add('Bridge gates go through gate_block (gates x enable)', isSrc([m '/Inverter/Bridge'], 1, 'gate_block', 1) ...
     && isSrc([m '/Inverter/gate_block'], 1, 'Modulator_SVPWM', 1), srcName([m '/Inverter/Bridge'], 1));
+
+% -- PV curtailment + grid fault (14 Oct sandbox, shipped 19 Oct) ------------------
+fprintf('\n== %s: PV curtailment and grid fault ==\n', m);
+add('PV: CurtailPI fed by bus_over = v_dc - V_cap', exists([m '/PV/CurtailPI']) && isSrc([m '/PV/CurtailPI'], 1, 'bus_over', 1) ...
+    && exists([m '/PV/V_cap']) && strcmp(get_param([m '/PV/V_cap'],'Value'), 'xp.curt.Vcap'), tryGet([m '/PV/V_cap'],'Value'));
+add('PV: MPPT Controller takes curtail; P&O has hold', exists([m '/PV/MPPT Controller/curtail']) ...
+    && exists([m '/PV/MPPT Controller/PO MPPT/hold']), '');
+gfb = [m '/Inverter/GridSide/GridFault'];
+add('GridFault at the PCC, timed by xp.flt', exists(gfb) && strcmp(get_param(gfb,'fault_start_time'),'xp.flt.t') ...
+    && strcmp(get_param(gfb,'fault_duration'),'xp.flt.dur') && strcmp(get_param(gfb,'R_pn_fault'),'xp.flt.R'), tryGet(gfb,'fault_start_time'));
 end
 
 if opts.Simulate
@@ -272,6 +284,21 @@ if opts.Simulate
                 add('island_sfs: PCC < 5 % within 100 ms of the trip', p.pass && p.Vpcc_off_ms < 100, sprintf('%.0f ms (ref 31)', p.Vpcc_off_ms));
             end
         end
+    end
+end
+
+if opts.Simulate && opts.Fault
+    % Reference (14 Oct sandbox): bus peak 771 V, power back ~0.23 s after clearing,
+    % no trip, grid current 891 A peak at clearing.
+    fprintf('\n== %s: grid dip 220 ms, ride-through (~8 min) ==\n', m);
+    rf = runIntegration("grid_dip", Model=mdl, Save=false);
+    if isempty(rf)
+        add('grid_dip scenario runs', false, 'simulation failed - see warning above');
+    else
+        f = rf.frt;
+        add('Ride-through: no trip', ~f.tripped, '');
+        add('Ride-through: bus peak < 800 V', f.Vdc_peak < xp.frt.Vdc_max, sprintf('%.0f V (ref 771)', f.Vdc_peak));
+        add('Ride-through: power back within 1 s', f.P_back_s <= xp.frt.t_back, sprintf('%.2f s', f.P_back_s));
     end
 end
 

@@ -1,5 +1,49 @@
 # Integration results: PV + wind + inverter on the 700 V bus
 
+## Current build: `intSystem_aqibPLL` (19 Oct 2026)
+
+Aqib's `SRF_PLL` (starting at −π/2), SFS + Redhwan's relay, the trip path and PCC, plus two
+additions from the 14 Oct fault work: **PV bus-overvoltage curtailment** (`PV/CurtailPI`,
+`xp.curt`: above 720 V it pushes the P&O reference towards Voc and freezes P&O) and a **grid
+fault at the PCC** (`Inverter/GridSide/GridFault`, `xp.flt`, off unless a scenario sets it).
+`checkBuild("intSystem_aqibPLL", Simulate=false)` 57/57. All nine scenarios pass.
+
+| Scenario | What happens | Bus worst | Back in ±1 % | Grid THD | P (Total Power) | Verdict |
+|---|---|---|---|---|---|---|
+| nominal | 1000 W/m², 8 m/s | 1.21 % | 12 ms | 1.67 % | 117.0 kW | **PASS** |
+| cloud | 1000 → 200 → 1000 W/m² | 1.21 % | 12 ms | 3.88 % | 37.1 kW (shaded) | **PASS** |
+| gust | 8 → 12 m/s | 1.21 % | 12 ms | 1.57 % | 130.8 kW | **PASS** |
+| over_rating | full sun + 12 m/s, ~173 kW into 150 kVA | 3.76 % (726 V, holds at 720 V) | 37 ms ¹ | 1.44 % | 149.1 kW | **PASS** (was FAIL, finding A) |
+| weak_grid | SCR 3, X/R 15 | 1.60 % | 11 ms | 2.68 % | 117.0 kW | **PASS** |
+| trip | stand-in trip at 0.5 s | 1.21 % before | 12 ms | 1.67 % | 117.2 kW | **PASS** |
+| island | grid opens at 0.5 s | — | — | — | — | **PASS**, relay trips in 65.4 ms |
+| island_sfs | grid opens, SFS + relay alone | — | — | — | — | **PASS**, SC5 65.4 ms (< 2 s) |
+| grid_dip | 3-phase fault at the PCC, 220 ms, 0.15 pu left, SCR 10 | **771 V peak** (limit 800 V) | 21 ms after clearing | 2.00 % before | 116 kW back **0.17 s** after clearing | **PASS**, no trip |
+
+¹ While curtailing, "settled" means inside ±1 % of the 720 V cap: the inverter is at its
+150 kVA clamp, so the DC loop cannot pull the bus back to 700 V.
+
+Ride-through limits (README, decided 19 Oct): bus < 800 V and output back within 1 s of
+clearing; the 5 % / 200 ms band applies to normal disturbances only. **Still open:** the grid
+current spikes to **891 A (2.9 pu)** for one sample at clearing. The PLL sits on its 60 Hz
+clamp after the voltage returns and resumes on the wrong angle. Proposed fix: freeze the PLL
+while |v| is low (Aqib's block).
+
+Figures: `intSystem_aqibPLL/figures/Normal/` and `intSystem_aqibPLL/figures/Fault/`
+(`grid_dip.png`: PCC voltage, grid current, PLL f, DC bus against 800 V, trip).
+
+```matlab
+intPaths();
+runIntegration([], Model="intSystem_aqibPLL", Parallel=true);   % 9 runs, ~20 min on 3 workers
+plotIntegration(["nominal","cloud","gust","over_rating","weak_grid"], Model="intSystem_aqibPLL");
+plotProtection([], Model="intSystem_aqibPLL");  plotFault([], Model="intSystem_aqibPLL");
+checkBuild("intSystem_aqibPLL", Fault=true)
+```
+
+---
+
+## Earlier: the 2 Oct integration (stand-in PLL, no curtailment)
+
 Runs of 2 Oct 2026, MATLAB R2026a, fixed step 0.5 µs. Components as on `main` @ c86f01c:
 PV `models/pv-v2` (Belal, switched), wind `models/wind` (Huy, averaged), inverter
 `models/inverter` (Duc, switched). The DC bus (44 mF), the DC-link loop and the PLL are
@@ -57,8 +101,8 @@ saturates. Fix in his block: start at −π/2.
 
 ## Open findings
 
-- **A. No curtailment.** When PV + wind exceed the 150 kVA inverter, the bus runs away
-  (~290 V/s). Something has to curtail the sources. Owner: team decision.
+- **A. Closed in `intSystem_aqibPLL` (19 Oct).** PV curtailment holds the bus at 720 V in
+  over_rating (was 853 V and climbing). Belal's `models/pv-v2` itself is unchanged.
 - **B. Weak-grid PLL frequency ripple.** f̂ swings 47.5–52.8 Hz (stand-in), enough to trip
   frequency protection. Aqib's 300 Hz notch halves it; the 150 Hz part remains. A 20 ms moving
   average on f̂ before any trip, or a slower PLL (10 Hz still re-locks in ~65 ms). Owner: Aqib.

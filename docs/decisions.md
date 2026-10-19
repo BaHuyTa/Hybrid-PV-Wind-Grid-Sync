@@ -216,3 +216,29 @@ grid dip peak 771 V, full power back by ~0.95 s, no trip.
 **Drawing.** `docs/single-line-diagram.png` now shows the DC-link capacitor as the bus, with
 the extra line across it removed (product owner, W7 and W10: "the capacitor itself
 represents the bus").
+
+---
+
+## 2026-10-19 — PV curtailment and grid-fault ride-through in the integration
+
+**Decided (Henry, 14 Oct; shipped 19 Oct).** The integration model `intSystem_aqibPLL`
+curtails PV when the bus rises above **720 V**: a PI (Kp 3, Ki 300, 0–150 V) adds to the
+P&O panel-voltage reference, pushing the panel towards Voc, and P&O holds while it acts.
+Only PV is curtailed; it covers both cases below. It lives in the copy of the PV stage
+inside the integration model, so Belal's `models/pv-v2` is unchanged.
+
+**Two fault cases (14 Oct).** A *grid-side* fault must be ridden through: the AEMO
+short-duration undervoltage test (50 V for 220 ms, as used for AS/NZS 4777.2), output
+back within 1 s. An *our-side* fault is cleared by our own breaker (AS/NZS 3000 times,
+not yet verified) and must trip. NER S5.1a.8 clearing times are transmission only.
+
+**Result (19 Oct, all nine scenarios pass):** over_rating holds at 720 V (was a runaway to
+853 V; finding A closed); grid_dip peaks at 771 V (limit 800 V), no trip, full power
+0.17 s after clearing; nominal, cloud, gust, weak grid, trip and both islands unchanged.
+Numbers: `models/integration/results/RESULTS.md`.
+
+**Open:** a one-sample 891 A (2.9 pu) grid-current spike at clearing, because the PLL
+resumes on the wrong angle after sitting on its 60 Hz clamp (same mechanism as Redhwan's
+180° anti-phase finding of 7 Oct). Proposed: freeze the PLL while |v| is low. Owner: Aqib.
+Wind is not curtailed; a deeper or longer dip that leaves export below wind power would
+need it.

@@ -39,6 +39,10 @@ r.t_trip = tt;
 asked = xs.trip.t < s.T || xs.pcc.grid.t < s.T;
 r.nuisance_trip = ~asked && tt < s.T;
 tProt = min([tt, xs.pcc.grid.t, s.T]);
+% A grid fault (19 Oct) ends normal operation too, but it is not a protection
+% event: nothing should trip. The 5 % / 200 ms checks stop at its inception and
+% faultMetrics judges the ride-through against the 800 V / 1 s limits instead.
+tNorm = min(tProt, xs.flt.t);
 
 vdc = g('v_dc');  t = vdc.Time;  v = vdc.Data(:);
 ipv = g('i_pv').Data(:);  iw = g('i_wind').Data(:);  ii = g('i_inv').Data(:);
@@ -70,7 +74,7 @@ r.S_pu  = hypot(r.P_ac, r.Q_ac) / 150e3;
 % ---- DC bus -----------------------------------------------------------------
 r.Vdc_mean  = mean(v(m));
 r.Vdc_pp    = max(v(m)) - min(v(m));          % ripple in the window
-pre = t < tProt;                              % normal operation only
+pre = t < tNorm;                              % normal operation only
 r.Vdc_max   = max(v(pre));
 r.Vdc_min   = min(v(pre));
 r.dev_max   = max(abs(v(pre) - xp.Vdc_ref));
@@ -83,15 +87,18 @@ r.pass_dev  = r.dev_pct < 5;
 % it only lightly (1 ms moving mean) to strip the switching ripple.
 tg  = (0:1e-3:s.T)';
 ev  = unique([0; tg(find(diff(s.G(tg)) ~= 0 | diff(s.v_wind(tg)) ~= 0) + 1)]);
-ev  = ev(ev < tProt);
+ev  = ev(ev < tNorm);
 vf  = movmean(v, round(1e-3/median(diff(t))));
 band = 0.01*xp.Vdc_ref;
 r.events   = ev';
 r.recover  = nan(size(ev'));
 for k = 1:numel(ev)
-    tEnd = tProt; if k < numel(ev), tEnd = ev(k+1); end
+    tEnd = tNorm; if k < numel(ev), tEnd = ev(k+1); end
     seg  = t >= ev(k) & t < tEnd;
-    ts   = t(seg); out = abs(vf(seg) - xp.Vdc_ref) > band;
+    % Settled = inside +/-1 % of the setpoint, or of the curtailment cap while
+    % PV curtailment holds the bus there (over_rating: the inverter is at its
+    % 150 kVA clamp, so the DC loop cannot pull the bus back to 700 V).
+    ts   = t(seg); out = abs(vf(seg) - xp.Vdc_ref) > band & abs(vf(seg) - xs.curt.Vcap) > band;
     if ~any(out),              r.recover(k) = 0;
     elseif out(end),           r.recover(k) = Inf;          % never came back
     else,                      r.recover(k) = ts(find(out, 1, 'last') + 1) - ev(k);
@@ -126,6 +133,17 @@ r.pass = r.pass_dev && r.pass_recover && (r.pass_thd || r.S_pu < 0.5) && ~r.nuis
 % SFS angle in the steady window, if the model has SFS (logged as theta_sfs)
 if any(string(logsout.getElementNames) == "theta_sfs")
     ths = g('theta_sfs');  r.theta_sfs_deg = rad2deg(mean(ths.Data(ths.Time >= w(1) & ths.Time < w(2))));
+end
+
+% ---- PV curtailment: how hard it pulled (0 = never acted) ------------------
+if any(string(logsout.getElementNames) == "pv_curtail")
+    c = g('pv_curtail');  r.curt_max_V = max(c.Data(:));
+end
+
+% ---- Grid fault ride-through, if this run has one ---------------------------
+if xs.flt.t < s.T
+    r.frt = faultMetrics(g, t, v, tl, xs, xp, s);
+    r.pass = r.pass && r.frt.pass;
 end
 
 % ---- Protection path, if this run has a trip or opens the grid -------------
@@ -185,6 +203,47 @@ if ~isnan(p.t_island)
 end
 p.pass = p.i_inv_off_ms < 20 && p.i_pv_off_ms < 20 && p.i_wind_off_ms < 20 ...
          && p.dev_after_pct < 5;
+end
+
+function f = faultMetrics(g, t, v, tl, xs, xp, s)
+% Ride-through of a fault the grid clears (19 Oct limits, README):
+%   no trip, bus peak < xp.frt.Vdc_max, and the AC output back to xp.frt.P_back
+%   of its pre-fault value within xp.frt.t_back of clearing, staying there.
+% Also reported, not judged: PCC voltage left during the fault, the bus recovery
+% into +/-1 %, and the grid-current peak around clearing (the PLL comes back on
+% the wrong angle - open item for Aqib).
+t0 = xs.flt.t;  tc = t0 + xs.flt.dur;
+f.t_fault = t0;  f.t_clear = tc;
+
+aft = t >= t0;
+f.Vdc_peak = max(v(aft));
+vf = movmean(v, round(1e-3/median(diff(t))));
+out = abs(vf - xp.Vdc_ref) > 0.01*xp.Vdc_ref & aft;
+if ~any(out), f.vdc_back_ms = 0;
+elseif out(end), f.vdc_back_ms = Inf;
+else, f.vdc_back_ms = 1e3*(t(find(out, 1, 'last') + 1) - tc);
+end
+
+vab = rows(tl.v_abc);  t2 = tl.v_abc.Time;
+Vpk = sqrt(2/3*sum(vab.^2, 2));                     % space-vector magnitude = phase peak
+f.Vpcc_fault_pu = median(Vpk(t2 > t0 + 0.01 & t2 < tc)) / xp.Vgd;
+i2 = rows(tl.i2_abc);  ti = tl.i2_abc.Time;
+f.i_pk_A  = max(abs(i2(ti >= t0 & ti < tc + 0.05, :)), [], 'all');
+f.i_pk_pu = f.i_pk_A / xp.dc.Id_max;
+
+% AC output from the energy meter, one-cycle (20 ms) average
+E = g('E');  Ed = rows(E);  te = E.Time;
+P = movmean(gradient(Ed(:,4), te), round(0.02/median(diff(te))));
+f.P_pre_kW = mean(P(te >= t0 - 0.2 & te < t0)) / 1e3;
+f.P_end_kW = mean(P(te >= te(end) - 0.05)) / 1e3;
+low = P < xs.frt.P_back*f.P_pre_kW*1e3 & te >= tc;
+if ~any(low), f.P_back_s = 0;
+elseif low(end), f.P_back_s = Inf;
+else, f.P_back_s = te(find(low, 1, 'last') + 1) - tc;
+end
+
+tr = g('trip');  f.tripped = any(tr.Data(:) > 0.5);
+f.pass = ~f.tripped && f.Vdc_peak < xs.frt.Vdc_max && f.P_back_s <= xs.frt.t_back;
 end
 
 function ts = settle(tx, x, lim, t0)

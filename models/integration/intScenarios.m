@@ -37,7 +37,7 @@ s(end).v_wind0 = 8;
 s(end).window = [1.8 2.0];
 
 s(end+1).name = "over_rating";
-s(end).why    = "Full sun AND rated wind: about 173 kW into a 150 kVA inverter. Nothing curtails the sources.";
+s(end).why    = "Full sun AND rated wind: about 173 kW into a 150 kVA inverter. PV curtailment must hold the bus near 720 V.";
 s(end).T      = 0.5;
 s(end).G      = @(t) 1000 + 0*t;
 s(end).v_wind = @(t) 12 + 0*t;
@@ -88,6 +88,23 @@ s(end).v_wind = @(t) 8 + 0*t;
 s(end).v_wind0 = 8;
 s(end).window = [0.3 0.5];            % steady, grid-connected
 s(end).set    = {"pcc.rlc.open0", 0, "pcc.site.open0", 1, "pcc.grid.t", 0.5};
+
+% ---- Grid fault ride-through (14 Oct sandbox, shipped 19 Oct). A fault the GRID
+% clears: our breakers stay closed, nothing may trip, power must come back.
+% AEMO short-duration undervoltage test (used for AS/NZS 4777.2): 50 V for 220 ms.
+% R = 0.024 ohm leaves ~35 V rms (0.15 pu), slightly harsher than 50 V. The grid
+% needs an impedance for the fault to drop voltage across: SCR 10, X/R 15.
+% Needs a model with Inverter/GridSide/GridFault (intSystem_aqibPLL).
+s(end+1).name = "grid_dip";
+s(end).why    = "Nominal weather; a three-phase fault at the PCC from 0.5 s for 220 ms (0.15 pu left), cleared by the grid. Ride through: no trip, bus < 800 V, power back within 1 s.";
+s(end).T      = 1.5;
+s(end).G      = @(t) 1000 + 0*t;
+s(end).v_wind = @(t) 8 + 0*t;
+s(end).v_wind0 = 8;
+s(end).window = [0.3 0.5];            % steady, before the fault
+s(end).set    = {"flt.R", 0.024, "flt.t", 0.5, "flt.dur", 0.22};
+s(end).block  = {"Inverter/GridSide/Grid", "impedance_option", "1", ...
+                 "Inverter/GridSide/Grid", "SShortCircuit", "1.5e6"};   % SCR 10 x 150 kVA
 
 [s.T_cell] = deal(25);
 for k = 1:numel(s)

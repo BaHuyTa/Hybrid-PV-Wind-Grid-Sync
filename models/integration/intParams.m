@@ -113,6 +113,35 @@ xp.pcc.rlc.QL = xp.pcc.rlc.Qf*xp.pcc.rlc.P;    % var inductive
 xp.pcc.rlc.QC = xp.pcc.rlc.QL - 2*pi*ip.f_grid*ip.Cf*ip.V_ll^2;  % var capacitive
 xp.pcc.rlc.open0 = 1;    xp.pcc.rlc.t = 1e6;   % normal: a test fixture, out
 
+%% ---- PV bus-overvoltage curtailment (14 Oct, shipped 19 Oct) -----------
+% Nothing else limits what PV + wind push into the bus: at coincident peak
+% (over_rating) or while a grid dip blocks export, the bus ran away (853 V,
+% 1179 V). Above Vcap a PI raises the P&O panel-voltage reference (towards Voc,
+% less power) and freezes P&O, or P&O reads the curtailed drop as "wrong way"
+% and drifts. Vcap 720 V sits above every normal transient (worst 2.4 %) and
+% inside the 5 % band. Lives in this model's PV subsystem (CurtailPI); Belal's
+% models/pv-v2 is unchanged. Set Vcap = 1e6 to switch it off.
+xp.curt.Vcap  = 720;                           % V
+xp.curt.Kp    = 3;                             % V of Vref per V of bus overshoot
+xp.curt.Ki    = 300;                           % 1/s  (Kp/Ki = 10 ms)
+xp.curt.dVmax = 150;                           % V    reaches past Voc
+
+%% ---- Grid fault at the PCC (Inverter/GridSide/GridFault) ---------------
+% Three-phase fault to star through R, applied at t for dur, then cleared by
+% the grid (our breakers stay closed). Only meaningful with grid impedance on:
+% on a stiff source it would short the ideal grid. 1e6 s = never.
+% Grid-side case = AEMO short-duration undervoltage test used for AS/NZS
+% 4777.2 (50 V for 220 ms); see scenario grid_dip and decisions.md 2026-10-19.
+xp.flt.R   = 1e-3;                             % ohm  phase-to-star (1e-3 = bolted)
+xp.flt.t   = 1e6;                              % s    inception
+xp.flt.dur = 0.08;                             % s    duration
+% Ride-through limits (README, decided 19 Oct): the 5 % bus band is for normal
+% disturbances; through a grid fault the bus may reach 800 V (+15 %), and the
+% output must be back within 1 s of clearing.
+xp.frt.Vdc_max = 800;                          % V
+xp.frt.t_back  = 1.0;                          % s   after clearing
+xp.frt.P_back  = 0.9;                          % -   "back" = 90 % of pre-fault P
+
 %% ---- Logging -----------------------------------------------------------
 % Decimation relative to the 0.5 us base step. Fast signals at 5 us (200 kHz,
 % enough for THD to well past the 10 kHz sidebands); slow ones at 50 us.
