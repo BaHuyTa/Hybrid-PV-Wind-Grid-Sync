@@ -210,8 +210,7 @@ function f = faultMetrics(g, t, v, tl, xs, xp, s)
 %   no trip, bus peak < xp.frt.Vdc_max, and the AC output back to xp.frt.P_back
 %   of its pre-fault value within xp.frt.t_back of clearing, staying there.
 % Also reported, not judged: PCC voltage left during the fault, the bus recovery
-% into +/-1 %, and the grid-current peak around clearing (the PLL comes back on
-% the wrong angle - open item for Aqib).
+% into +/-1 %, and the grid-current peak around clearing.
 t0 = xs.flt.t;  tc = t0 + xs.flt.dur;
 f.t_fault = t0;  f.t_clear = tc;
 

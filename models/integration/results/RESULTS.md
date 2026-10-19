@@ -5,8 +5,8 @@
 Aqib's `SRF_PLL` (starting at −π/2), SFS + Redhwan's relay, the trip path and PCC, plus two
 additions from the 14 Oct fault work: **PV bus-overvoltage curtailment** (`PV/CurtailPI`,
 `xp.curt`: above 720 V it pushes the P&O reference towards Voc and freezes P&O) and a **grid
-fault at the PCC** (`Inverter/GridSide/GridFault`, `xp.flt`, off unless a scenario sets it).
-`checkBuild("intSystem_aqibPLL", Simulate=false)` 57/57. All nine scenarios pass.
+fault at the PCC** (`Inverter/GridSide/GridFault`, `xp.flt`, off unless a scenario sets it), cleared
+by `Brk_fault` at each phase's current zero. `checkBuild("intSystem_aqibPLL", Simulate=false)` 58/58. All nine scenarios pass.
 
 | Scenario | What happens | Bus worst | Back in ±1 % | Grid THD | P (Total Power) | Verdict |
 |---|---|---|---|---|---|---|
@@ -18,16 +18,22 @@ fault at the PCC** (`Inverter/GridSide/GridFault`, `xp.flt`, off unless a scenar
 | trip | stand-in trip at 0.5 s | 1.21 % before | 12 ms | 1.67 % | 117.2 kW | **PASS** |
 | island | grid opens at 0.5 s | — | — | — | — | **PASS**, relay trips in 65.4 ms |
 | island_sfs | grid opens, SFS + relay alone | — | — | — | — | **PASS**, SC5 65.4 ms (< 2 s) |
-| grid_dip | 3-phase fault at the PCC, 220 ms, 0.15 pu left, SCR 10 | **771 V peak** (limit 800 V) | 21 ms after clearing | 2.00 % before | 116 kW back **0.17 s** after clearing | **PASS**, no trip |
+| grid_dip | 3-phase fault at the PCC, 220 ms, 0.15 pu left, SCR 10 | **770 V peak** (limit 800 V) | 21 ms after clearing | 2.00 % before | 116 kW back **0.17 s** after clearing | **PASS**, no trip, 357 A (1.17 pu) peak |
 
 ¹ While curtailing, "settled" means inside ±1 % of the 720 V cap: the inverter is at its
 150 kVA clamp, so the DC loop cannot pull the bus back to 700 V.
 
 Ride-through limits (README, decided 19 Oct): bus < 800 V and output back within 1 s of
-clearing; the 5 % / 200 ms band applies to normal disturbances only. **Still open:** the grid
-current spikes to **891 A (2.9 pu)** for one sample at clearing. The PLL sits on its 60 Hz
-clamp after the voltage returns and resumes on the wrong angle. Proposed fix: freeze the PLL
-while |v| is low (Aqib's block).
+clearing; the 5 % / 200 ms band applies to normal disturbances only.
+
+**Clearing at current zero (19 Oct, later).** The first run showed an 891 A (2.9 pu) grid-current
+spike at clearing, first blamed on the PLL. It was the model: the fault block opened all three
+phases at once, 5 µs before the PLL could act, chopping the grid-inductance current into the
+filter capacitor (1153 V at the PCC). With `Brk_fault` clearing each phase at its current zero,
+the peak is 357 A, the current already flowing through the dip; bus, recovery and no-trip are
+unchanged. No PLL change is needed. See `figures/Fault/grid_dip_clearing_before_after.png`.
+Noted, not a failure: the PLL sits on its 60 Hz clamp for ~20–25 ms after clearing; the relay's
+50 ms pickup keeps it from tripping.
 
 Figures: `intSystem_aqibPLL/figures/Normal/` and `intSystem_aqibPLL/figures/Fault/`
 (`grid_dip.png`: PCC voltage, grid current, PLL f, DC bus against 800 V, trip).

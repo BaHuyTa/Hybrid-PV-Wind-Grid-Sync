@@ -233,12 +233,22 @@ back within 1 s. An *our-side* fault is cleared by our own breaker (AS/NZS 3000 
 not yet verified) and must trip. NER S5.1a.8 clearing times are transmission only.
 
 **Result (19 Oct, all nine scenarios pass):** over_rating holds at 720 V (was a runaway to
-853 V; finding A closed); grid_dip peaks at 771 V (limit 800 V), no trip, full power
-0.17 s after clearing; nominal, cloud, gust, weak grid, trip and both islands unchanged.
+853 V; finding A closed); grid_dip peaks at 770 V (limit 800 V), no trip, full power
+0.17 s after clearing, grid current 357 A (1.17 pu); nominal, cloud, gust, weak grid, trip and both islands unchanged.
 Numbers: `models/integration/results/RESULTS.md`.
 
-**Open:** a one-sample 891 A (2.9 pu) grid-current spike at clearing, because the PLL
-resumes on the wrong angle after sitting on its 60 Hz clamp (same mechanism as Redhwan's
-180° anti-phase finding of 7 Oct). Proposed: freeze the PLL while |v| is low. Owner: Aqib.
-Wind is not curtailed; a deeper or longer dip that leaves export below wind power would
+**Fault clearing is done by a breaker at current zero (corrected the same day).** The first
+push blamed a one-sample 891 A (2.9 pu) grid-current spike at clearing on the PLL, and
+proposed a PLL freeze for Aqib. That was wrong. The spike peaks 5 µs after clearing, while
+the PLL angle error is still 2°; the `Fault (Three-Phase)` block opens all three phases at
+the same instant, chopping the fault current in the grid inductance (0.34 mH at SCR 10)
+into the 44.8 µF filter capacitor (PCC voltage 1153 V). Real breakers interrupt each phase
+at its current zero, so the fault block now sits behind `Brk_fault` (Circuit Breaker
+(Three-Phase), zero-crossing), which does the clearing. Spike gone: 891 → 357 A, which is
+the current the inverter already holds through the dip; nothing else changed. **No PLL
+change is needed for the fault case.** The PLL still sits on its 60 Hz clamp for ~20–25 ms
+after clearing; the relay's 50 ms pickup rides it out, so there is no trip, but the margin
+is thin. Recorded, not actioned.
+
+**Open:** wind is not curtailed; a deeper or longer dip that leaves export below wind power would
 need it.

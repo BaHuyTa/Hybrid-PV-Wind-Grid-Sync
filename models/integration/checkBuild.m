@@ -202,8 +202,14 @@ add('PV: CurtailPI fed by bus_over = v_dc - V_cap', exists([m '/PV/CurtailPI']) 
 add('PV: MPPT Controller takes curtail; P&O has hold', exists([m '/PV/MPPT Controller/curtail']) ...
     && exists([m '/PV/MPPT Controller/PO MPPT/hold']), '');
 gfb = [m '/Inverter/GridSide/GridFault'];
-add('GridFault at the PCC, timed by xp.flt', exists(gfb) && strcmp(get_param(gfb,'fault_start_time'),'xp.flt.t') ...
-    && strcmp(get_param(gfb,'fault_duration'),'xp.flt.dur') && strcmp(get_param(gfb,'R_pn_fault'),'xp.flt.R'), tryGet(gfb,'fault_start_time'));
+add('GridFault behind Brk_fault, starts at xp.flt.t', exists(gfb) && strcmp(get_param(gfb,'fault_start_time'),'xp.flt.t') ...
+    && strcmp(get_param(gfb,'R_pn_fault'),'xp.flt.R') && physLinked(gfb, 'Brk_fault'), tryGet(gfb,'fault_start_time'));
+% Clearing by a breaker, each phase at its current zero (19 Oct): the fault block's own
+% instant clearing chopped the grid-inductance current into Cf (891 A artifact).
+bfb = [m '/Inverter/GridSide/Brk_fault'];  fcs = [m '/Inverter/GridSide/fault_clear'];
+add('Brk_fault clears at current zero, at xp.flt.t + xp.flt.dur', exists(bfb) ...
+    && contains(get_param(bfb,'breaker_behavior'), 'zeroCrossingEnable') && exists(fcs) ...
+    && strcmp(get_param(fcs,'Time'), 'xp.flt.t + xp.flt.dur'), tryGet(bfb,'breaker_behavior'));
 end
 
 if opts.Simulate
@@ -288,8 +294,8 @@ if opts.Simulate
 end
 
 if opts.Simulate && opts.Fault
-    % Reference (14 Oct sandbox): bus peak 771 V, power back ~0.23 s after clearing,
-    % no trip, grid current 891 A peak at clearing.
+    % Reference (19 Oct, zero-crossing clearing): bus peak 770 V, power back 0.17 s
+    % after clearing, no trip, grid current 357 A peak (1.17 pu).
     fprintf('\n== %s: grid dip 220 ms, ride-through (~8 min) ==\n', m);
     rf = runIntegration("grid_dip", Model=mdl, Save=false);
     if isempty(rf)
@@ -299,6 +305,7 @@ if opts.Simulate && opts.Fault
         add('Ride-through: no trip', ~f.tripped, '');
         add('Ride-through: bus peak < 800 V', f.Vdc_peak < xp.frt.Vdc_max, sprintf('%.0f V (ref 771)', f.Vdc_peak));
         add('Ride-through: power back within 1 s', f.P_back_s <= xp.frt.t_back, sprintf('%.2f s', f.P_back_s));
+        add('Ride-through: grid current < 1.5 pu around clearing', f.i_pk_pu < 1.5, sprintf('%.0f A (ref 357)', f.i_pk_A));
     end
 end
 
@@ -307,6 +314,14 @@ fprintf('\n%d/%d checks pass.\n', nnz(T.pass), height(T));
 end
 
 function tf = exists(p), tf = getSimulinkBlockHandle(p) > 0; end
+function tf = physLinked(blk, name)
+% True if a physical (Simscape) port of blk is wired to a block called name.
+tf = false;  if ~exists(blk), return; end
+for pc = get_param(blk, 'PortConnectivity')'
+    h = [pc.SrcBlock pc.DstBlock];  h = h(h > 0);
+    if any(strcmp(get_param(h, 'Name'), name)), tf = true; return; end
+end
+end
 function h = srcBlk(blk, port)
 % Block driving input port "port" of blk (-1 if unconnected).
 h = -1;

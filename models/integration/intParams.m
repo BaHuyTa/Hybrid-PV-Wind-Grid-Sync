@@ -126,10 +126,13 @@ xp.curt.Kp    = 3;                             % V of Vref per V of bus overshoo
 xp.curt.Ki    = 300;                           % 1/s  (Kp/Ki = 10 ms)
 xp.curt.dVmax = 150;                           % V    reaches past Voc
 
-%% ---- Grid fault at the PCC (Inverter/GridSide/GridFault) ---------------
-% Three-phase fault to star through R, applied at t for dur, then cleared by
-% the grid (our breakers stay closed). Only meaningful with grid impedance on:
-% on a stiff source it would short the ideal grid. 1e6 s = never.
+%% ---- Grid fault at the PCC (Inverter/GridSide/GridFault + Brk_fault) -----
+% Three-phase fault through R, applied at t; after dur the grid clears it
+% (our breakers stay closed). Brk_fault does the clearing, each phase at its
+% current zero, as a real breaker does: the fault block's own clearing opens
+% all three phases at once, chopping the grid-inductance current into the LCL
+% capacitor (an 891 A / 2.9 pu artifact, 19 Oct). Only meaningful with grid
+% impedance on: on a stiff source it would short the ideal grid. 1e6 s = never.
 % Grid-side case = AEMO short-duration undervoltage test used for AS/NZS
 % 4777.2 (50 V for 220 ms); see scenario grid_dip and decisions.md 2026-10-19.
 xp.flt.R   = 1e-3;                             % ohm  phase-to-star (1e-3 = bolted)
