@@ -13,6 +13,7 @@ function files = plotDay(opts)
 
 arguments
     opts.Model (1,1) string = "intSystem_aqibPLL"
+    opts.Show  (1,1) logical = false   % true: leave the figures open (zoom, data tips), still saves the PNG
 end
 P  = intPaths();
 rd = P.results;  if opts.Model ~= "intSystem", rd = fullfile(rd, opts.Model); end
@@ -43,7 +44,7 @@ if isempty(D), error('plotDay:none', 'No day_*.mat in %s', rd); end
 files = strings(0);
 
 % ---- the input -------------------------------------------------------------
-f = figure('Visible','off','Color','w','Position',[100 100 1100 520]);
+f = figure('Visible',tern(opts.Show,'on','off'),'Color','w','Position',[100 100 1100 520]);
 tiledlayout(f, 2, 1, 'TileSpacing','compact', 'Padding','compact');
 nexttile; yyaxis left; plot(dp.t_real, dp.G, 'LineWidth',1.2); ylabel('G [W/m^2]');
 yyaxis right; plot(dp.t_real, dp.pv_pu*9.90, ':'); ylabel('Gullen solar farm [MW]'); grid on
@@ -53,10 +54,10 @@ yyaxis right; plot(dp.t_real, dp.w_pu*265.8, ':'); ylabel('Gullen wind farm [MW]
 title('Wind: Gullen Range wind farm (GULLRWF1+2), inverted through our turbine''s cubic curve (12 m/s rated)');
 sgtitle(f, sprintf('Real day in: 6 Oct 2026, 06:00-14:00 AEST, compressed %.0fx (5 min = %.0f ms of simulation)', ...
     dp.compression, 1e3*dp.step), 'FontSize', 11);
-files(end+1) = fullfile(fd, 'day_weather.png');  exportgraphics(f, files(end), 'Resolution', 120);  close(f);
+files(end+1) = fullfile(fd, 'day_weather.png');  exportgraphics(f, files(end), 'Resolution', 120);  if ~opts.Show, close(f); end
 
 % ---- the comparison ---------------------------------------------------------
-f = figure('Visible','off','Color','w','Position',[100 100 1400 900]);
+f = figure('Visible',tern(opts.Show,'on','off'),'Color','w','Position',[100 100 1400 900]);
 tiledlayout(f, 2, 2, 'TileSpacing','compact', 'Padding','compact');
 ref = D(end);  for k = 1:numel(D), if D(k).name == "day_load_max", ref = D(k); end, end
 nexttile; hold on
@@ -86,5 +87,7 @@ grid on;  title('Per case');
 for j = 1:numel(b), xtips = b(j).XEndPoints; text(xtips, b(j).YEndPoints, compose('%.1f', b(j).YData), ...
         'HorizontalAlignment','center', 'VerticalAlignment','bottom', 'FontSize',8); end
 sgtitle(f, 'Real day (Gullen Range NSW, 6 Oct 2026, 06:00-14:00): same weather, four site-load cases', 'FontSize', 12);
-files(end+1) = fullfile(fd, 'day_comparison.png');  exportgraphics(f, files(end), 'Resolution', 120);  close(f);
+files(end+1) = fullfile(fd, 'day_comparison.png');  exportgraphics(f, files(end), 'Resolution', 120);  if ~opts.Show, close(f); end
 end
+
+function v = tern(c, a, b), if c, v = a; else, v = b; end, end

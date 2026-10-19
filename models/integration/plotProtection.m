@@ -12,6 +12,7 @@ function files = plotProtection(names, opts)
 arguments
     names = []
     opts.Model (1,1) string = "intSystem"
+    opts.Show  (1,1) logical = false   % true: leave the figures open (zoom, data tips), still saves the PNG
 end
 if isempty(names), names = ["trip","island","island_sfs"]; end
 P = intPaths();
@@ -31,7 +32,7 @@ for nm = string(names)
     evt = [ti tt];  evt = evt(~isnan(evt));
     ev = @() arrayfun(@(x) xline(x, '--', 'Color', [0.4 0.4 0.4]), evt);
 
-    f = figure('Visible','off', 'Position',[100 100 1200 820], 'Color','w');
+    f = figure('Visible',tern(opts.Show,'on','off'), 'Position',[100 100 1200 820], 'Color','w');
     tiledlayout(f, 2, 2, 'TileSpacing','compact', 'Padding','compact');
 
     % -- 1. What has to stop ------------------------------------------------
@@ -85,7 +86,7 @@ for nm = string(names)
 
     sgtitle(f, sprintf('%s  -  %s', nm, s.why), 'FontSize', 11, 'Interpreter', 'none');   % "island_sfs" is not a subscript
     files(end+1) = fullfile(figDir, nm + ".png"); %#ok<AGROW>
-    exportgraphics(f, files(end), 'Resolution', 110);  close(f);
+    exportgraphics(f, files(end), 'Resolution', 110);  if ~opts.Show, close(f); end
 end
 end
 
@@ -93,3 +94,5 @@ function x = rows(ts)
 x = squeeze(ts.Data);
 if size(x,1) ~= numel(ts.Time), x = x.'; end
 end
+
+function v = tern(c, a, b), if c, v = a; else, v = b; end, end

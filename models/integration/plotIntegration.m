@@ -13,6 +13,7 @@ function files = plotIntegration(names, opts)
 arguments
     names = []
     opts.Model (1,1) string = "intSystem"
+    opts.Show  (1,1) logical = false   % true: leave the figures open (zoom, data tips), still saves the PNG
 end
 P      = intPaths();
 resDir = P.results;
@@ -29,7 +30,7 @@ files = strings(0);
 for nm = string(names)
     S = load(fullfile(resDir, nm + ".mat"));
     L = S.logsout;  s = S.s;  r = S.r;
-    f = figure('Visible','off', 'Position',[100 100 1200 820], 'Color','w');
+    f = figure('Visible',tern(opts.Show,'on','off'), 'Position',[100 100 1200 820], 'Color','w');
     tiledlayout(f, 2, 2, 'TileSpacing','compact', 'Padding','compact');
 
     % -- 1. Power flow ----------------------------------------------------
@@ -74,7 +75,9 @@ for nm = string(names)
     sgtitle(f, sprintf('%s  -  %s', s.name, s.why), 'Interpreter','none', 'FontSize', 11);
     fn = fullfile(figDir, nm + ".png");
     exportgraphics(f, fn, 'Resolution', 130);
-    close(f);
+    if ~opts.Show, close(f); end
     files(end+1) = fn; %#ok<AGROW>
 end
 end
+
+function v = tern(c, a, b), if c, v = a; else, v = b; end, end

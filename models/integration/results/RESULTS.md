@@ -1,5 +1,8 @@
 # Integration results: PV + wind + inverter on the 700 V bus
 
+**To see these live:** open `models/integration/runDemo.m` in MATLAB and run its sections
+(Ctrl+Enter), section 0 first. Saved runs load in seconds; missing ones simulate first.
+
 ## Current build: `intSystem_aqibPLL` (19 Oct 2026)
 
 Aqib's `SRF_PLL` (starting at −π/2), SFS + Redhwan's relay, the trip path and PCC, plus two

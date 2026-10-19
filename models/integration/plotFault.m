@@ -11,6 +11,7 @@ function files = plotFault(names, opts)
 arguments
     names = []
     opts.Model (1,1) string = "intSystem"
+    opts.Show  (1,1) logical = false   % true: leave the figures open (zoom, data tips), still saves the PNG
 end
 if isempty(names), names = "grid_dip"; end
 P = intPaths();
@@ -31,7 +32,7 @@ for nm = string(names)
     V = rows(tl.v_abc);  I = rows(tl.i2_abc);
     vdc = g('v_dc');  tr = g('trip');  wh = g('w_hat');
 
-    f = figure('Visible','off', 'Color','w', 'Position',[100 100 900 900]);
+    f = figure('Visible',tern(opts.Show,'on','off'), 'Color','w', 'Position',[100 100 900 900]);
     tiledlayout(f, 5, 1, 'TileSpacing','compact', 'Padding','compact');
     nexttile; plot(tl.v_abc.Time, V); ylabel('v_{PCC} [V]'); ylim([-500 500]); shade(t0, tc); xlim(xl); grid on
     title(sprintf('PCC voltage: %.2f pu left during the %.0f ms fault', fr.Vpcc_fault_pu, 1e3*(tc - t0)));
@@ -49,7 +50,7 @@ for nm = string(names)
     sgtitle(f, strjoin(textwrap(s.name + "  -  " + s.why, 120), newline), 'Interpreter','none', 'FontSize', 10);
     fn = fullfile(figDir, nm + ".png");
     exportgraphics(f, fn, 'Resolution', 130);
-    close(f);
+    if ~opts.Show, close(f); end
     files(end+1) = fn; %#ok<AGROW>
 end
 end
@@ -64,3 +65,5 @@ function x = rows(ts)
 x = squeeze(ts.Data);
 if size(x,1) ~= numel(ts.Time), x = x.'; end
 end
+
+function v = tern(c, a, b), if c, v = a; else, v = b; end, end
