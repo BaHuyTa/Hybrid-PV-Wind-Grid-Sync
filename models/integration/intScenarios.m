@@ -5,6 +5,7 @@ function scn = intScenarios(names)
 %   scn = intScenarios("cloud")     just the named ones
 %   scn = intScenarios("day")       the four real-day profile runs (not in "all": ~25 min each)
 %   scn = intScenarios("demo")      the extra event clips for demo/LiveDemo (not in "all")
+%   scn = intScenarios("webdemo")   the web demo matrix: 5 loads x {normal, dip, shed, island}
 %
 % Fields: name, T (stop time), G (@(t) W/m^2), v_wind (@(t) m/s), T_cell (degC),
 % v_wind0 (the wind speed the turbine starts settled at), window ([t0 t1],
@@ -117,8 +118,8 @@ s(end).block  = {"Inverter/GridSide/Grid", "impedance_option", "1", ...
 % which is all 5-minute data can resolve. Grid SCR 10 (X/R 15), so the load level
 % moves the PCC voltage. profile = true: only start-up counts as a bus disturbance.
 dp = gullenProfile();
-loads = [50 150 250];  tags = ["min","mid","max"];
-for j = 1:3
+loads = [50 150 250 100 200];  tags = ["min","mid","max","100","200"];   % 100/200: web demo (21 Oct)
+for j = 1:numel(loads)
     s(end+1).name = "day_load_" + tags(j); %#ok<AGROW>
     s(end).why    = sprintf("Real day (Gullen NSW, 6 Oct 2026, 06:00-14:00 in %.1f s); site load %d kW.", dp.T, loads(j));
     s(end).set    = {"pcc.site.P", loads(j)*1e3};
@@ -126,7 +127,7 @@ end
 s(end+1).name = "day_shed";
 s(end).why    = sprintf("Real day as above, site load 250 kW shed (breaker opens) at 10:00 = %.1f s.", dp.at("10:00"));
 s(end).set    = {"pcc.site.t", dp.at("10:00")};
-for k = numel(s)-3:numel(s)
+for k = numel(s)-numel(loads):numel(s)
     s(k).T = dp.T;  s(k).G = dp.Gf;  s(k).v_wind = dp.vf;  s(k).v_wind0 = dp.v(1);
     s(k).window  = [2.6 2.7];          % 10:20-10:30 real: full sun, after the shed, 5 cycles
     s(k).profile = true;  s(k).Jscale = 1/60;
@@ -165,6 +166,32 @@ s(end).T    = 2.6;
 s(end).set  = [s(k1).set, {"sfs.cf0", 0, "sfs.kSFS", 0}];
 s(end).demo = true;
 
+% ---- Web demo matrix (21 Oct; Final_Showcase/LiveDemo, outside git). The visitor picks the
+% factory load (50-250 kW) and one event. Same operating point as grid_dip (nominal weather,
+% SCR 10), event at 0.5 s. Unlike demo/LiveDemo's grid-lost case (matched test load), here the
+% grid is lost with the FACTORY still connected: the bus charges to ~770-837 V before the trip.
+%   normal  nothing happens               dip     grid_dip's fault (0.15 pu, 220 ms)
+%   shed    the factory's breaker opens   island  the grid's breaker opens (factory stays on)
+ev = struct('tag', {"normal","dip","shed","island"}, 'T', {1.5, 1.5, 1.5, 1.0}, ...
+    'set', {{}, {"flt.R", 0.024, "flt.t", 0.5, "flt.dur", 0.22}, {"pcc.site.t", 0.5}, {"pcc.grid.t", 0.5}}, ...
+    'why', {"no event", "grid fault at 0.5 s for 220 ms, 0.15 pu left", "factory load shed at 0.5 s", ...
+            "grid lost at 0.5 s with the factory still connected"});
+for L = 50:50:250
+    for e = ev
+        s(end+1).name = sprintf("demo_L%03d_%s", L, e.tag); %#ok<AGROW>
+        s(end).why    = sprintf("Web demo: %d kW factory, nominal weather; %s.", L, e.why);
+        s(end).T      = e.T;
+        s(end).G      = @(t) 1000 + 0*t;
+        s(end).v_wind = @(t) 8 + 0*t;
+        s(end).v_wind0 = 8;
+        s(end).window = [0.3 0.5];
+        s(end).set    = [{"pcc.site.P", L*1e3}, e.set];
+        s(end).block  = {"Inverter/GridSide/Grid", "impedance_option", "1", ...
+                         "Inverter/GridSide/Grid", "SShortCircuit", "1.5e6"};
+        s(end).webdemo = true;
+    end
+end
+
 [s.T_cell] = deal(25);
 for k = 1:numel(s)
     if isempty(s(k).block), s(k).block = {}; end
@@ -172,15 +199,17 @@ for k = 1:numel(s)
     if isempty(s(k).profile), s(k).profile = false; end
     if isempty(s(k).Jscale),  s(k).Jscale  = 1; end
     if isempty(s(k).demo),    s(k).demo    = false; end
+    if isempty(s(k).webdemo), s(k).webdemo = false; end
 end
 
 if nargin && ~isempty(names)
     names = string(names);
     if any(names == "day"),  names = [names, [s([s.profile]).name]]; end
     if any(names == "demo"), names = [names, [s([s.demo]).name]]; end
+    if any(names == "webdemo"), names = [names, [s([s.webdemo]).name]]; end
     s = s(ismember([s.name], names));
 else
-    s = s(~[s.profile] & ~[s.demo]);    % the long real-day runs and demo clips only when asked for
+    s = s(~[s.profile] & ~[s.demo] & ~[s.webdemo]);   % real-day runs and demo clips only when asked for
 end
 scn = s;
 end

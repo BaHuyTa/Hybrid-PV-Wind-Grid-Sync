@@ -109,6 +109,26 @@ day cases reproduce the numbers above exactly.
 Run on the homelab server (i7-12700T, R2026a): the 8 event runs took 29 min on 5 workers and
 the 3 day runs 32 min on 3 workers, 6 to 9 min of computing per simulated second.
 
+## Grid lost with the factory still connected (21 Oct 2026, web demo runs)
+
+The `"webdemo"` scenarios (20 runs: 50–250 kW × normal, fault, shed, grid lost; same operating
+point) feed the browser demo in `Final_Showcase/LiveDemo` (outside git). Their normal, fault and
+shed runs agree with the table above. The new case is **grid lost with the factory still on**,
+which the matched-load tests do not cover:
+
+| Run | Factory | Trip after the grid opens | DC bus peak |
+|---|---|---|---|
+| demo_L050_island | 50 kW | 53.3 ms | 769 V |
+| demo_L100_island | 100 kW | 52.7 ms | 769 V |
+| demo_L150_island | 150 kW | 62.5 ms | **812 V** |
+| demo_L200_island | 200 kW | 62.5 ms | **824 V** |
+| demo_L250_island | 250 kW | 66.1 ms | **837 V** |
+
+Detection is fast at every load, and inverter, PV and wind all stop within 7 ms of the trip.
+But during the ~60 ms island the PCC voltage collapses, the inverter can barely export, and sun
+and wind keep charging the bus. From 150 kW up it ends above the 800 V ride-through limit, and
+it stays there after the trip because nothing discharges it. See finding E.
+
 ---
 
 ## Earlier: the 2 Oct integration (stand-in PLL, no curtailment)
@@ -178,6 +198,11 @@ saturates. Fix in his block: start at −π/2.
 - **C. PV diode D1 Ron = 0.3 Ω** costs about 13 kW. Owner: Belal.
 - **D. Closed (2 Oct).** Aqib's DC-link loop drives a battery current source, and the system
   has no battery, so the system keeps this folder's DC-link loop. Aqib's `SRF_PLL` is the PLL.
+- **E. Bus overcharge when the grid is lost under load (21 Oct).** 812–837 V at 150–250 kW
+  factory load, above the 800 V limit (table above). Curtailment acts too slowly for a ~60 ms
+  event, wind is not curtailed, and the bus has no discharge path. Options: stop the PV boost on
+  bus overvoltage (fast, not the PI), curtail wind, or add a brake chopper / bleed resistor.
+  Owner: integration (Henry), with Belal and Huy for their converters.
 
 ## Figures (stand-in PLL)
 
