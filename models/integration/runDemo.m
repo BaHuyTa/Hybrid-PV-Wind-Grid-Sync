@@ -59,3 +59,7 @@ open_system(fullfile(here, M + ".slx"));
 
 %% 7. Close all the figures
 close all
+
+%% 8. The roadshow app: every case replayed as if live (demo/README.md)
+% Base MATLAB only: it plays demo/demoPack.mat, no simulation.
+addpath(fullfile(here, 'demo'));  app = LiveDemo();

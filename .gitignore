@@ -29,6 +29,9 @@ results/*.mat
 models/integration/results/**/*.mat
 *.fig
 
+# LiveDemo backup video (shared separately, ~tens of MB)
+models/integration/demo/*.mp4
+
 # MATLAB session
 startup_log.txt
 matlab_crash_dump*

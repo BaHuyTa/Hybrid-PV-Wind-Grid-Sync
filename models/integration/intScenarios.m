@@ -4,6 +4,7 @@ function scn = intScenarios(names)
 %   scn = intScenarios()            all of them
 %   scn = intScenarios("cloud")     just the named ones
 %   scn = intScenarios("day")       the four real-day profile runs (not in "all": ~25 min each)
+%   scn = intScenarios("demo")      the extra event clips for demo/LiveDemo (not in "all")
 %
 % Fields: name, T (stop time), G (@(t) W/m^2), v_wind (@(t) m/s), T_cell (degC),
 % v_wind0 (the wind speed the turbine starts settled at), window ([t0 t1],
@@ -133,20 +134,53 @@ for k = numel(s)-3:numel(s)
                     "Inverter/GridSide/Grid", "SShortCircuit", "1.5e6"};
 end
 
+% ---- Live demo app (20 Oct, roadshow). Every event at the same operating point
+% as grid_dip (nominal weather, SCR 10), so the site load is the only thing that
+% changes between clips. grid_dip itself is the 250 kW case. Not in "all".
+k0 = find([s.name] == "grid_dip");
+for P = [50 150]
+    s(end+1) = s(k0); %#ok<AGROW>
+    s(end).name = "grid_dip_" + P;
+    s(end).why  = sprintf("grid_dip with a %d kW site load (grid_dip is 250 kW).", P);
+    s(end).set  = [s(k0).set, {"pcc.site.P", P*1e3}];
+    s(end).demo = true;
+end
+for P = [50 150 250]
+    s(end+1).name = "shed_" + P; %#ok<AGROW>
+    s(end).why    = sprintf("Nominal weather, SCR 10, %d kW site load; its breaker opens at 0.5 s. The PCC phase steps, the PLL swings, nothing may trip.", P);
+    s(end).T      = 1.0;
+    s(end).G      = @(t) 1000 + 0*t;
+    s(end).v_wind = @(t) 8 + 0*t;
+    s(end).v_wind0 = 8;
+    s(end).window = [0.3 0.5];        % steady, before the shed
+    s(end).set    = {"pcc.site.P", P*1e3, "pcc.site.t", 0.5};
+    s(end).block  = s(k0).block;      % SCR 10, X/R 15
+    s(end).demo   = true;
+end
+k1 = find([s.name] == "island_sfs");
+s(end+1) = s(k1);
+s(end).name = "island_nosfs";
+s(end).why  = "island_sfs with SFS switched off: on the matched load the frequency stays in band, so the relay alone never trips (limit 2 s).";
+s(end).T    = 2.6;
+s(end).set  = [s(k1).set, {"sfs.cf0", 0, "sfs.kSFS", 0}];
+s(end).demo = true;
+
 [s.T_cell] = deal(25);
 for k = 1:numel(s)
     if isempty(s(k).block), s(k).block = {}; end
     if isempty(s(k).set),   s(k).set   = {}; end
     if isempty(s(k).profile), s(k).profile = false; end
     if isempty(s(k).Jscale),  s(k).Jscale  = 1; end
+    if isempty(s(k).demo),    s(k).demo    = false; end
 end
 
 if nargin && ~isempty(names)
     names = string(names);
-    if any(names == "day"), names = [names, [s([s.profile]).name]]; end
+    if any(names == "day"),  names = [names, [s([s.profile]).name]]; end
+    if any(names == "demo"), names = [names, [s([s.demo]).name]]; end
     s = s(ismember([s.name], names));
 else
-    s = s(~[s.profile]);                % the long real-day runs only when asked for
+    s = s(~[s.profile] & ~[s.demo]);    % the long real-day runs and demo clips only when asked for
 end
 scn = s;
 end

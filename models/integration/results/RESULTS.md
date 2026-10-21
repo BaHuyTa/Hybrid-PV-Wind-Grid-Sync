@@ -81,6 +81,34 @@ runIntegration("day", Model="intSystem_aqibPLL", Parallel=true);   % 4 runs, ~45
 plotDay();
 ```
 
+## Live demo runs (20 Oct 2026)
+
+Extra event runs for the roadshow app (`../demo/README.md`). Every event uses the `grid_dip`
+operating point (1000 W/m², 8 m/s, SCR 10), so the site load is the only thing that changes.
+These are the `"demo"` scenarios in `intScenarios.m`. The re-run `grid_dip`, `island_sfs` and
+day cases reproduce the numbers above exactly.
+
+| Run | Event | Site load | Result |
+|---|---|---|---|
+| grid_dip_50 | grid fault, 220 ms | 50 kW | **PASS**: no trip, bus peak 759 V, power back 0.11 s after clearing, 378 A (1.23 pu), 0.22 pu left |
+| grid_dip_150 | grid fault, 220 ms | 150 kW | **PASS**: no trip, bus peak 766 V, power back 0.16 s, 368 A (1.20 pu), 0.18 pu left |
+| grid_dip | grid fault, 220 ms | 250 kW | **PASS**: as above (770 V, 0.17 s, 357 A, 0.16 pu) |
+| shed_50 | site breaker opens at 0.5 s | 50 kW | **PASS**: no trip, PLL 48.2–52.1 Hz, out of band ≤ 0.2 ms at a time, bus peak 701 V |
+| shed_150 | site breaker opens at 0.5 s | 150 kW | **PASS**: no trip, PLL 44.4–56.1 Hz, out of band ≤ 8.8 ms at a time, bus peak 702 V |
+| shed_250 | site breaker opens at 0.5 s | 250 kW | **PASS**: no trip, PLL 40.7–60 Hz, out of band ≤ 8.4 ms at a time, bus peak 705 V |
+| island_nosfs | grid opens, SFS off | matched RLC | **No trip in 2.1 s**: f stays at 49.91–50.13 Hz. Expected: on a matched load only SFS can find the island |
+
+- The fault is milder at light load: 0.22 pu left at 50 kW against 0.16 pu at 250 kW. The bus
+  peak and recovery time follow that, and the current peak goes the other way (378 A against 357 A).
+- In the sheds, the PLL frequency leaves the band in bursts of a few ms, far under the
+  relay's 50 ms pickup. That pickup is what stops a load step from causing a nuisance trip.
+- `island_sfs` against `island_nosfs` is the case for active anti-islanding. With SFS the
+  frequency leaves 47–52 Hz 15 ms after the grid opens and the relay trips at 65.4 ms; without
+  it nothing trips.
+
+Run on the homelab server (i7-12700T, R2026a): the 8 event runs took 29 min on 5 workers and
+the 3 day runs 32 min on 3 workers, 6 to 9 min of computing per simulated second.
+
 ---
 
 ## Earlier: the 2 Oct integration (stand-in PLL, no curtailment)
